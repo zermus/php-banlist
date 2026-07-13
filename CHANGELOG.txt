@@ -19,6 +19,40 @@ URLs stable and makes rollback a one-command operation.
 Nothing yet.
 
 
+[0.5] - 2026-07-12
+------------------
+
+Nginx support + security hardening. NO schema changes: upgrading from
+0.4 is just the file swap (INSTALL.txt section 9); re-running
+install.php is not required.
+
+Added
+.....
+- Nginx is now a supported web server alongside Apache. New
+  nginx.conf.example translates every shipped .htaccess protection
+  one-for-one (private/, cron/, sql/, config.php and dotfile/extension
+  denies; IP-list.txt / FQDN-list.txt feed rewrites with query-string
+  passthrough; no-PHP-execution under assets/), each block commented
+  with the Apache rule it mirrors. INSTALL.txt gained section 4b with
+  curl sanity checks that the deny rules actually took.
+
+Security
+........
+- Logout now requires a POST with a valid CSRF token. Previously any
+  cross-site GET (an <img> tag, a forced navigation) could end the
+  session and burn the remember-me token (logout CSRF / denial of
+  session). The nav logout link is now a styled POST form; a bare GET
+  of logout.php harmlessly redirects to the dashboard.
+- Fixed an open redirect in the login ?next= guard: the same-app path
+  check allowed a backslash as the first path character, and browsers
+  normalize "Location: /\evil.com" to the protocol-relative
+  "//evil.com". Redirect targets containing a backslash are now
+  rejected and fall back to the dashboard. Only exploitable for
+  docroot installs, and only after a successful login.
+- Release-gate CSP audit (grep for on*=, style=, <script outside
+  install.php) came back clean.
+
+
 [0.4] - 2026-07-01
 ------------------
 

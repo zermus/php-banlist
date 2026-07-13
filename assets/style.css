@@ -80,6 +80,16 @@ a:hover { text-decoration: underline; }
   padding-left: 14px;
 }
 .nav .logout { color: var(--error); }
+/* Logout is a POST form (CSRF-protected); render its button as a nav link. */
+.nav .logout-form { display: inline; margin: 0; }
+.nav button.logout {
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  cursor: pointer;
+}
+.nav button.logout:hover { color: var(--accent); text-decoration: underline; }
 
 /* ---- main ---- */
 .main {

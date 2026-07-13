@@ -1,8 +1,8 @@
 php-banlist
 ===========
 
-Version 0.4. Self-hosted manager for dynamic firewall banlists.
-Two feed URLs (rewritten by .htaccess to list.php):
+Version 0.5. Self-hosted manager for dynamic firewall banlists.
+Two feed URLs (rewritten by the web server to list.php):
 
   <base>/IP-list.txt    one IPv4/IPv6 address or CIDR per line
   <base>/FQDN-list.txt  one hostname per line
@@ -16,7 +16,8 @@ accepts.
 REQUIREMENTS
 ------------
 
-  - Apache 2.4 with mod_rewrite (mod_headers, mod_expires recommended)
+  - Apache 2.4 with mod_rewrite (mod_headers, mod_expires recommended),
+    or Nginx with php-fpm (new in 0.5; see nginx.conf.example)
   - PHP 8.0+ (tested on 8.3)
   - MariaDB 10.6+ or MySQL 8.0+
   - PHP extensions: pdo, pdo_mysql, session, mbstring, openssl,
@@ -50,7 +51,8 @@ LAYOUT
 ------
 
   php-banlist/
-    .htaccess               rewrites + file denies
+    .htaccess               rewrites + file denies (Apache)
+    nginx.conf.example      the same protections for Nginx installs
     config.example.php      copy to config.php
     index.php               dashboard
     login.php / logout.php

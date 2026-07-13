@@ -1,0 +1,96 @@
+# php-banlist :: example Nginx server configuration (new in 0.5)
+#
+# Nginx does not read .htaccess files, so every protection Apache gets from
+# the shipped .htaccess files must live in the server config instead. This
+# file translates each of them one-for-one; the comment above each block
+# names the .htaccess rule it mirrors. If you customize, keep ALL of the
+# deny blocks — they are what keep config.php, private/, cron/, and sql/
+# off the wire.
+#
+# Assumes php-fpm listening on a unix socket. Adjust fastcgi_pass, paths,
+# and TLS bits to your environment. Tested layout: app extracted to
+# /var/www/php-banlist-0.5 with a /var/www/php-banlist symlink (see
+# INSTALL.txt section 1); this example serves the app under /php-banlist/.
+# For a dedicated vhost with the app at the docroot, drop the /php-banlist
+# prefix from every location below and set root to the app directory.
+
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name your-server.example.com;
+
+    ssl_certificate     /etc/pki/tls/certs/your-server.crt;
+    ssl_certificate_key /etc/pki/tls/private/your-server.key;
+
+    root /var/www;
+
+    # .htaccess: Options -Indexes  (autoindex is off by default in nginx,
+    # stated here explicitly for clarity)
+    autoindex off;
+
+    # .htaccess: DirectoryIndex index.php
+    index index.php;
+
+    # private/.htaccess and cron/.htaccess: Require all denied.
+    # sql/ ships only migration files; the root .htaccess denies *.sql by
+    # extension, here we deny the whole tree. ^~ beats the regex .php
+    # location below, so PHP files in these trees can never reach php-fpm.
+    location ^~ /php-banlist/private/ { deny all; }
+    location ^~ /php-banlist/cron/    { deny all; }
+    location ^~ /php-banlist/sql/     { deny all; }
+
+    # assets/.htaccess: no PHP execution under /assets (defense in depth).
+    # Serve static files only; anything executable-looking is denied.
+    location ^~ /php-banlist/assets/ {
+        location ~ \.(php|phtml|phar)$ { deny all; }
+        # root .htaccess: ExpiresByType text/css "access plus 1 hour"
+        location ~ \.css$ { expires 1h; }
+    }
+
+    # root .htaccess: <Files "config.php"> Require all denied
+    location = /php-banlist/config.php { deny all; }
+
+    # root .htaccess FilesMatch: deny dotfiles and source-ish extensions
+    # (^\.|\.(bak|swp|swo|orig|sql|sh|log|md|example|dist|ini|conf)$).
+    # Apache applies FilesMatch per-file in every directory, so these match
+    # at any depth. (The dotfile rule also blocks /.well-known — carve out
+    # an exception above it if you use ACME http-01 challenges.)
+    location ~ /\. { deny all; }
+    location ~ ^/php-banlist/.+\.(bak|swp|swo|orig|sql|sh|log|md|example|dist|ini|conf)$ {
+        deny all;
+    }
+
+    # root .htaccess mod_rewrite: clean URLs for the firewall feeds
+    #   RewriteRule ^IP-list\.txt$    list.php?type=ip    [L,QSA]
+    #   RewriteRule ^FQDN-list\.txt$  list.php?type=fqdn  [L,QSA]
+    # $is_args$args preserves extra query params (QSA), e.g. ?token=...
+    location = /php-banlist/IP-list.txt {
+        rewrite ^ /php-banlist/list.php?type=ip$is_args$args last;
+    }
+    location = /php-banlist/FQDN-list.txt {
+        rewrite ^ /php-banlist/list.php?type=fqdn$is_args$args last;
+    }
+
+    # PHP handler. No .htaccess equivalent (Apache uses mod_php/proxy_fcgi).
+    # try_files prevents path-info trickery against nonexistent scripts.
+    location ~ ^/php-banlist/.+\.php$ {
+        try_files $uri =404;
+        include fastcgi_params;
+        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+        fastcgi_pass unix:/run/php-fpm/www.sock;
+    }
+
+    location /php-banlist/ {
+        try_files $uri $uri/ =404;
+    }
+}
+
+# Notes
+# -----
+# - The application sets its own security headers (CSP, X-Frame-Options,
+#   HSTS, etc.) from PHP (private/header.php); do not duplicate them here.
+# - After editing:  nginx -t && systemctl reload nginx
+# - SELinux (RHEL/Alma/Rocky): httpd_t must reach php-fpm and the app dir:
+#     chcon -R -t httpd_sys_content_t /var/www/php-banlist-0.5
+# - install.php is intentionally reachable until you delete it after
+#   setup/upgrade (INSTALL.txt section 5) — same behavior as Apache.

@@ -1,9 +1,11 @@
 php-banlist :: INSTALL
 ======================
 
-Requirements: Apache 2.4 + mod_rewrite, PHP 8.0+, MariaDB 10.6+ (or
-MySQL 8.0+). PHP extensions: pdo, pdo_mysql, session, mbstring,
-openssl, filter, hash.
+Requirements: Apache 2.4 + mod_rewrite OR Nginx + php-fpm (new in
+0.5), PHP 8.0+, MariaDB 10.6+ (or MySQL 8.0+). PHP extensions: pdo,
+pdo_mysql, session, mbstring, openssl, filter, hash.
+
+Apache users follow section 4; Nginx users follow section 4b instead.
 
 
 1. FILES
@@ -15,8 +17,8 @@ any previous version; a symlink named `php-banlist` points to the
 active release. This makes rollback a one-command symlink re-point.
 
     cd /path/to/document-root
-    tar xzf php-banlist-0.4.tar.gz
-    sudo ln -s php-banlist-0.4 php-banlist
+    tar xzf php-banlist-0.5.tar.gz
+    sudo ln -s php-banlist-0.5 php-banlist
     cd php-banlist
     sudo chown -R apache:apache .
     sudo find . -type d -exec chmod 750 {} \;
@@ -75,6 +77,32 @@ your vhost. Required module: mod_rewrite.
     sudo systemctl reload httpd       # or apache2
 
 
+4b. NGINX (alternative to section 4)
+------------------------------------
+
+Nginx ignores the shipped .htaccess files, so their protections MUST
+be recreated in the server config — without them config.php, private/,
+cron/, and sql/ are served to anyone who asks. nginx.conf.example
+translates every .htaccess rule one-for-one, with a comment naming the
+Apache rule each block mirrors. Copy the location blocks into your
+vhost, adjust the /php-banlist path prefix, root, and fastcgi_pass to
+your layout, then:
+
+    sudo nginx -t
+    sudo systemctl reload nginx
+
+Sanity-check the denies before first run — all four must return 403
+(or 404), never file contents:
+
+    curl -sI https://your-server/php-banlist/config.php        | head -1
+    curl -sI https://your-server/php-banlist/private/db.php    | head -1
+    curl -sI https://your-server/php-banlist/cron/expire.php   | head -1
+    curl -sI https://your-server/php-banlist/sql/migrations/0001-initial.sql | head -1
+
+Adjust the ownership commands from section 1 to your php-fpm user
+(often nginx or www-data instead of apache).
+
+
 5. FIRST RUN
 ------------
 
@@ -122,27 +150,26 @@ Extract the new version next to the old one, carry your config.php
 forward, re-point the symlink, then re-run install.php to apply any
 new migrations.
 
-0.4 ships a schema change (migration 0003 adds api_tokens.can_write
-and the enable_write_api setting), so re-running install.php is
-REQUIRED on this upgrade, not optional. Make sure the DB user has DDL
-privileges at that moment (see section 2 if you revoked them after the
-last install).
+0.5 ships NO schema changes, so upgrading from 0.4 is just the file
+swap below — re-running install.php is harmless but not required.
+(Upgrading from 0.3 or earlier still needs install.php for migration
+0003; make sure the DB user has DDL privileges at that moment — see
+section 2 if you revoked them after the last install.)
 
     cd /path/to/document-root
-    tar xzf php-banlist-0.4.tar.gz                  # adjust version
-    sudo cp php-banlist/config.php php-banlist-0.4/
-    sudo chown -R apache:apache php-banlist-0.4
-    sudo find php-banlist-0.4 -type d -exec chmod 750 {} \;
-    sudo find php-banlist-0.4 -type f -exec chmod 640 {} \;
-    sudo ln -sfn php-banlist-0.4 php-banlist        # atomic swap
+    tar xzf php-banlist-0.5.tar.gz                  # adjust version
+    sudo cp php-banlist/config.php php-banlist-0.5/
+    sudo chown -R apache:apache php-banlist-0.5
+    sudo find php-banlist-0.5 -type d -exec chmod 750 {} \;
+    sudo find php-banlist-0.5 -type f -exec chmod 640 {} \;
+    sudo ln -sfn php-banlist-0.5 php-banlist        # atomic swap
 
-Then open install.php in your browser. It detects pending migrations
-and applies them. Delete install.php afterward.
+If migrations are pending, open install.php in your browser to apply
+them. Delete install.php afterward.
 
-New in 0.4: config.example.php gained an api_acl block (optional
-source-IP allowlist for the write API). It defaults to empty (allow
-any source), so your carried-forward config.php keeps working as-is;
-the write API itself stays off until enabled in settings anyway.
+New in 0.5: Nginx is now a supported web server (see section 4b and
+nginx.conf.example). Also note logout is now a POST — if you scripted
+GET /logout.php anywhere, that request now just redirects.
 
 To roll back, just point the symlink at the previous version:
 

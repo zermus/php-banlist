@@ -9,10 +9,10 @@ declare(strict_types=1);
  * Application version. Bumped on each release. Pre-1.0 = testing/unstable;
  * minor bumps may include schema migrations and breaking changes.
  */
-const PBL_VERSION = '0.4';
+const PBL_VERSION = '0.5';
 
 if (!defined('PHPBANLIST_VERSION')) {
-    define('PHPBANLIST_VERSION', '0.4');
+    define('PHPBANLIST_VERSION', '0.5');
 }
 
 /**

@@ -54,7 +54,10 @@ $u = current_user();
       <a href="<?= e($base) ?>/tokens.php">tokens</a>
     <?php endif; ?>
     <a href="<?= e($base) ?>/profile.php" class="who"><?= e($u['username']) ?>@<?= e($u['role']) ?></a>
-    <a class="logout" href="<?= e($base) ?>/logout.php">logout</a>
+    <form method="post" action="<?= e($base) ?>/logout.php" class="logout-form">
+      <?= csrf_field() ?>
+      <button type="submit" class="logout">logout</button>
+    </form>
   </nav>
   <?php endif; ?>
 </header>

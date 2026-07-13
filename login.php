@@ -21,9 +21,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($u === '' || $p === '') {
         $error = 'Username and password required.';
     } elseif (attempt_login($u, $p, $remember)) {
-        // Build a safe redirect: only same-app paths allowed
+        // Build a safe redirect: only same-app paths allowed. Backslashes are
+        // rejected outright because browsers normalize "/\host" in a Location
+        // header to the protocol-relative "//host" (open redirect).
         $next = (string)($_GET['next'] ?? $base . '/');
-        if (!preg_match('~^' . preg_quote($base, '~') . '/[^/]~', $next)) {
+        if (strpos($next, '\\') !== false
+            || !preg_match('~^' . preg_quote($base, '~') . '/[^/\\\\]~', $next)) {
             $next = $base . '/';
         }
         header('Location: ' . $next);
