@@ -1,0 +1,309 @@
+php-banlist :: CHANGELOG
+========================
+
+Format follows the "Keep a Changelog" convention. Dates are ISO 8601.
+Versions follow Semantic Versioning. Pre-1.0 releases (0.x) are
+considered experimental and may break compatibility between minor
+versions.
+
+Each release ships as php-banlist-<version>.tar.gz and extracts to a
+matching php-banlist-<version>/ directory. Deploy by symlinking a
+stable name (php-banlist) at the active version directory; upgrade by
+re-pointing the symlink with `ln -sfn`. This keeps your firewall feed
+URLs stable and makes rollback a one-command operation.
+
+
+[Unreleased]
+------------
+
+Nothing yet.
+
+
+[0.4] - 2026-07-01
+------------------
+
+Pagination + write API release. This release DOES change the schema:
+it adds a can_write column to api_tokens and an enable_write_api
+setting. You MUST re-run install.php after upgrading (see "Upgrade
+from 0.3" below).
+
+Added
+.....
+- Pagination on the ip bans, fqdn bans, and audit log views, replacing
+  the previous hard LIMIT 500 caps. 100 rows per page, JS-free prev/next
+  GET links that preserve the current search/filter state. Out-of-range
+  page numbers clamp to the last real page (relevant after deletions).
+  Confirmation round-trips and post-action redirects also preserve the
+  filtered, paginated view, so deleting an entry on page 3 of a search
+  returns you to page 3 of that search.
+- Write API (api.php): add and remove bans over HTTP using API tokens.
+  Off by default and double-gated: BOTH the global enable_write_api
+  setting (settings page) AND a per-token can_write flag (tokens page)
+  must be on. All tokens issued before 0.4 remain read-only, so
+  enabling the API never silently upgrades existing credentials.
+  - POST only; form-encoded or JSON body; token via X-API-Token header
+    (preferred; keeps the secret out of access logs) or token= param.
+  - Respects per-token ip/fqdn/both scoping. Multi-entry values (same
+    newline/comma splitting as the UI forms), reasons, and the same
+    duration shortcuts (30m 2h 7d 1mo 1y p; blank = system default).
+  - Token-only auth: sessions and cookies are never consulted, so the
+    endpoint cannot be driven cross-site by a logged-in browser (no
+    cookie auth means CSRF does not apply). No CORS headers emitted.
+  - Optional api_acl source-IP allowlist in config.php, separate from
+    the feed list_acl.
+  - Everything is audited as api_{ip,fqdn}_ban_{add,del} under the
+    actor "token:<label>", attributed to the token's issuing user.
+- Remembered-devices management on the profile page: see every active
+  "stay signed in" token for your account (created / last used /
+  expires, with a "this device" badge), sign out any single device via
+  the standard JS-free confirmation interstitial, or sign out all
+  other devices in one click. Shown whenever tokens exist, even if the
+  operator has since disabled remember_me in config, so stale tokens
+  stay visible and revocable.
+
+Changed
+.......
+- tokens.php: token creation gains an "allow write" checkbox; the
+  token list shows a write column and whether the global write API
+  switch is currently on.
+- settings.php: the feeds fieldset is now "feeds & api" and gains the
+  enable_write_api toggle. Toggling it is audit-logged
+  (write_api_toggle).
+
+Security
+........
+- Changing your own password now revokes the persistent login tokens
+  of all OTHER remembered devices (the device making the change keeps
+  its token). A superadmin resetting a user's password revokes ALL of
+  that user's remembered devices, since the old credential can no
+  longer be trusted. Both are recorded in the audit log.
+- Fixed a CSP-dead style="max-width:600px" attribute on the profile
+  page. Inline style attributes are blocked by our style-src 'self'
+  policy (they would need 'unsafe-inline'), so the table silently
+  rendered full-width - the same bug class as the dead inline
+  onsubmit/onchange handlers fixed in 0.3. Replaced with a stylesheet
+  class (.table-narrow). The no-JS/no-inline posture is unchanged; the
+  CSP still has no script-src and no 'unsafe-inline' anywhere.
+
+Upgrade from 0.3
+................
+1. Extract php-banlist-0.4.tar.gz alongside php-banlist-0.3/.
+2. Copy your config.php across (optionally add the new api_acl block;
+   see config.example.php).
+3. Temporarily re-grant DDL if you revoked it (ALTER is required for
+   migration 0003):
+       GRANT CREATE, ALTER, INDEX, DROP ON banlist.* TO 'banlist'@'localhost';
+4. Re-point the symlink: ln -sfn php-banlist-0.4 php-banlist
+5. Re-run install.php in the browser. It applies migration 0003
+   (api_tokens.can_write + the enable_write_api setting) and re-locks.
+6. Optionally revoke DDL again.
+The write API stays off until you enable it in settings AND flag
+individual tokens as writable, so this upgrade changes no behavior by
+itself. Rollback: re-point the symlink to 0.3 (the 0003 schema
+additions are backward-compatible; 0.3 ignores them).
+
+
+[0.3] - 2026-06-17
+------------------
+
+Settings/config cleanup release, plus optional persistent login. This
+release DOES change the schema: it adds a remember_tokens table. You
+MUST re-run install.php after upgrading (see "Upgrade from 0.2" below).
+This is unlike 0.2, which was a straight symlink flip.
+
+Added
+.....
+- Optional "remember me" persistent login. Disabled by default; enable
+  it in config.php (remember_me.enabled). When on, the login page shows
+  a "stay signed in on this device" checkbox that keeps a session alive
+  across browser restarts and idle/absolute expiry for a fixed window
+  (remember_me.days, clamped 1-90, default 7). Tokens use the
+  selector/validator pattern, rotate on every use, are revoked on logout,
+  and are pruned at expiry by cron/expire.php.
+- Idle (inactivity) session timeout is now live and UI-tunable on the
+  settings page (idle timeout minutes; 0 disables). It is separate from
+  the operator-set absolute_ttl hard ceiling in config.php.
+- JS-free confirmation step for destructive actions (delete an IP ban,
+  delete an FQDN ban, delete a user, revoke a token). The action link now
+  lands on a server-rendered confirm card that POSTs with a CSRF token.
+  This replaces the inline onsubmit="confirm()" prompts, which never
+  fired under the strict CSP. Search/filter state is preserved across
+  the confirm/cancel round trip.
+- Data retention windows for the nightly cron are now configurable in
+  config.php (retention.login_attempts_days, retention.audit_log_days)
+  instead of being hardcoded in cron/expire.php.
+
+Changed
+.......
+- Settings page rebuilt with grouped fieldsets (ban defaults / login &
+  session security / feeds) and a dedicated stacked layout, replacing the
+  reused add-form flex class that mislaid heterogeneous controls.
+- Brute-force policy is now read through a single accessor, login_policy(),
+  which merges the operator-set per-IP floor (config.php) with the
+  UI-tunable per-account thresholds (settings table). The deliberate
+  storage split is unchanged; only the read path is consolidated.
+
+Fixed
+.....
+- The per-account lockout setting "session_timeout_minutes", seeded in
+  the database since 0.1 but never read, is now wired to the live idle
+  timeout described above.
+- The user role <select> on the users page used onchange="this.form.submit()"
+  with no submit button, so role changes silently did nothing under the
+  strict CSP. It now has an explicit "set" button and no inline handler.
+- Removed the remaining dead, CSP-blocked onsubmit="confirm()" handlers
+  (password reset on the users page; the destructive flows listed above).
+
+Security
+........
+- remember_tokens stores only the SHA-256 of each validator, never the
+  validator itself, so a database read alone yields no usable cookie.
+  Validators are compared in constant time. A matched selector with a
+  bad validator is treated as theft and purges all of that user's tokens.
+  Tokens are additionally pinned to the issuing user agent. The cookie
+  carries the same hardening as the session cookie (Secure when on HTTPS,
+  HttpOnly, SameSite=Strict).
+- A user-agent mismatch on an established session still hard-destroys the
+  session AND clears any remember-me cookie.
+
+Upgrade from 0.2
+................
+- This release adds a table, so the symlink flip alone is NOT enough.
+  Extract alongside the existing install, carry config.php forward,
+  re-point the stable symlink, then RE-RUN install.php to apply migration
+  0002 (it adds remember_tokens), and delete install.php again:
+      tar xzf php-banlist-0.3.tar.gz
+      sudo cp php-banlist/config.php php-banlist-0.3/
+      sudo ln -sfn php-banlist-0.3 php-banlist
+      # open install.php in a browser to apply the migration, then:
+      sudo rm php-banlist-0.3/install.php
+- Remember-me stays off until you set remember_me.enabled = true in
+  config.php; no behavior changes if you leave it disabled.
+- New config keys (remember_me, retention) have safe built-in defaults,
+  so an old config.php keeps working unchanged. Add the new blocks from
+  config.example.php to customize them.
+- Roll back by pointing the symlink at php-banlist-0.2. The added table
+  is harmless to older code; restore a pre-upgrade SQL dump only if you
+  want it gone.
+
+
+[0.2] - 2026-06-09
+------------------
+
+Minor UI quality-of-life release. No schema changes, no config changes.
+Upgrade is a straight symlink flip (see below); install.php does not need
+to be re-run.
+
+Added
+.....
+- Dashboard feed endpoints are now clickable links that open the IP and
+  FQDN feeds in a new browser tab (target="_blank", rel="noopener
+  noreferrer"). Display text is unchanged.
+- Duration shortcuts on the ip-bans and fqdn-bans pages are now clickable.
+  Clicking one (e.g. 30m, 7d, permanent) reloads the page with the duration
+  field pre-filled and jumps to the add form. Implemented JS-free via a
+  ?dur= query parameter so it works under the existing strict CSP
+  (default-src 'none', no script-src). The current search/filter state
+  (q, expired) is preserved across the click.
+
+Security
+........
+- The ?dur= value is validated through parse_duration() before being
+  reflected into the form and is HTML-escaped via e() regardless, so it
+  cannot be used as an injection vector.
+
+Upgrade from 0.1
+................
+- Extract php-banlist-0.2.tar.gz alongside your existing install and
+  re-point the stable symlink:
+      ln -sfn php-banlist-0.2 php-banlist
+- Your config.php, database, and feed URLs are untouched. Roll back with
+  the same command pointed back at php-banlist-0.1.
+
+
+[0.1] - 2026-05-17
+------------------
+
+Initial public release. Feature complete for basic operation, but
+considered testing-grade until 1.0. Expect schema migrations and
+potential breaking config changes in 0.x releases.
+
+Added
+.....
+- Two independent firewall feed endpoints:
+  - GET <base>/IP-list.txt    one IPv4/IPv6 address or CIDR per line
+  - GET <base>/FQDN-list.txt  one hostname per line
+  Both feeds use plain text, # comment header, UTF-8, LF line endings.
+  Verified compatible with: pfSense URL Table Aliases, OPNsense URL
+  Tables, Palo Alto External Dynamic Lists (IP List and Domain List),
+  Cisco Firepower / FTD Security Intelligence feeds, Fortinet FortiGate
+  Threat Feeds (External Block List), SonicWall custom block lists.
+- Admin UI for managing both lists, with per-entry reason notes and
+  added-at timestamps (UI-only; not emitted to firewalls).
+- Per-entry expiry with calendar-accurate duration math via DateInterval.
+  Duration shortcuts: s seconds, m minutes, h hours, d days, w weeks,
+  mo months, y years, p (or permanent / forever) for no expiration.
+  System-wide default timeout configurable in settings, defaults to
+  permanent.
+- Role-based access control: readonly, admin, superadmin.
+- Audit log with user, action, target, source IP.
+- Bulk add (paste multiple addresses one per line).
+- Search, filter, optional view of expired entries.
+- Per-user timezone with curated presets covering US, Europe, Russia,
+  Japan, India, Australia. UTC stored, local-time displayed.
+- Self-service profile page: change own timezone and password.
+- Optional API token gating for the public feeds (SHA-256 hashed in DB).
+- Optional source-IP ACL on the public feeds (CIDR-based).
+- Schema migration system in install.php:
+  - Applies pending migrations under sql/migrations/ on each run.
+  - Baselines existing manual installs.
+  - Auto-locks once no migrations remain and a user exists.
+- Real-time password validation on install.php with confirm-password
+  field. Driven entirely by config.php password policy.
+- Cron expirer (cron/expire.php) for tidying up expired ban rows and
+  pruning login_attempts and audit_log.
+- Dark terminal aesthetic UI with neon-green accent, Fira Code monospace.
+
+Security
+........
+- Argon2id passwords (BCRYPT fallback), password_needs_rehash on every
+  login.
+- PDO with ATTR_EMULATE_PREPARES = false. Real prepared statements only.
+- CSRF tokens on every state-changing form, hash_equals comparison.
+- Sessions: HttpOnly, Secure, SameSite=Strict, periodic ID rotation,
+  UA pinning, absolute TTL.
+- Per-IP and per-account login throttling with account lockout.
+- Dummy password_verify on unknown user to mask timing.
+- CSP default-src 'none', HSTS (only when actually on HTTPS),
+  X-Frame-Options: DENY, X-Content-Type-Options: nosniff,
+  strict Referrer-Policy.
+- Strict input normalization for IPs/CIDRs/hostnames, re-validated again
+  at emit time (defense in depth).
+- Last-superadmin protection on delete and demote.
+- FK constraint prevents deleting a user who owns ban entries.
+- install.php auto-locks once any user exists and no migrations are
+  pending; re-upload to apply schema changes, then delete again.
+
+Infrastructure
+..............
+- Drop-in deployment: ships .htaccess files (no <Directory> blocks, so
+  valid in .htaccess context everywhere) for rewrites, file denies, and
+  PHP-execution deny under assets/. Works on any LAMP install where the
+  directory's AllowOverride permits FileInfo, AuthConfig, Indexes, and
+  Options (which "AllowOverride All", the distro default, covers).
+- Path-independent: base_path auto-detects from $_SERVER['SCRIPT_NAME'];
+  works at docroot or under any subdirectory.
+- Config file at project root (config.example.php). Optional Unix socket
+  connection for local MariaDB.
+- Auto-detect HTTPS for cookie flags and HSTS, honoring trusted_proxies
+  for X-Forwarded-Proto.
+
+Requirements
+............
+- Apache 2.4+ with mod_rewrite. mod_headers and mod_expires recommended.
+- PHP 8.0+ (tested on 8.3).
+- MariaDB 10.6+ or MySQL 8.0+.
+
+License
+.......
+- MIT.

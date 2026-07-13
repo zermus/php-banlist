@@ -1,0 +1,152 @@
+php-banlist :: INSTALL
+======================
+
+Requirements: Apache 2.4 + mod_rewrite, PHP 8.0+, MariaDB 10.6+ (or
+MySQL 8.0+). PHP extensions: pdo, pdo_mysql, session, mbstring,
+openssl, filter, hash.
+
+
+1. FILES
+--------
+
+Extract the tarball inside your document root (or wherever you want
+the app served from). The version-numbered directory lives alongside
+any previous version; a symlink named `php-banlist` points to the
+active release. This makes rollback a one-command symlink re-point.
+
+    cd /path/to/document-root
+    tar xzf php-banlist-0.4.tar.gz
+    sudo ln -s php-banlist-0.4 php-banlist
+    cd php-banlist
+    sudo chown -R apache:apache .
+    sudo find . -type d -exec chmod 750 {} \;
+    sudo find . -type f -exec chmod 640 {} \;
+
+
+2. DATABASE
+-----------
+
+install.php applies the schema, so the MySQL user needs DDL privileges
+at install time:
+
+    sudo mysql <<'SQL'
+    CREATE DATABASE banlist CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+    CREATE USER 'banlist'@'localhost' IDENTIFIED BY 'CHANGE_ME';
+    GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, ALTER, INDEX, DROP, REFERENCES
+        ON banlist.* TO 'banlist'@'localhost';
+    FLUSH PRIVILEGES;
+    SQL
+
+After install you can revoke DDL to tighten posture, then re-grant
+when upgrading:
+
+    sudo mysql -e "REVOKE CREATE, ALTER, INDEX, DROP ON banlist.* FROM 'banlist'@'localhost';"
+
+
+3. CONFIG
+---------
+
+    sudo cp config.example.php config.php
+    sudo $EDITOR config.php           # set db.pass
+    sudo chown root:apache config.php
+    sudo chmod 640 config.php
+
+base_path is auto-detected; no need to set it.
+
+
+4. APACHE
+---------
+
+Most LAMP installs ship AllowOverride All for DocumentRoot and need
+nothing - drop the files in and the shipped .htaccess does the work.
+
+If your AllowOverride is locked down, either loosen it for this
+directory:
+
+    <Directory "/path/to/php-banlist">
+        AllowOverride AuthConfig FileInfo Indexes Options
+        Require all granted
+    </Directory>
+
+...or copy the .htaccess contents into matching <Directory> blocks in
+your vhost. Required module: mod_rewrite.
+
+    sudo apachectl configtest
+    sudo systemctl reload httpd       # or apache2
+
+
+5. FIRST RUN
+------------
+
+Open https://your-server/php-banlist/install.php in a browser.
+install.php applies any pending migrations from sql/migrations/ and
+prompts for the first superadmin. It auto-locks once a user exists and
+nothing is pending. Delete the file afterward:
+
+    sudo rm install.php
+
+
+6. CRON
+-------
+
+Nightly expiry + log pruning, as the apache user:
+
+    3 4 * * *  /usr/bin/php /path/to/php-banlist/cron/expire.php
+
+
+7. FEEDS
+--------
+
+    https://your-server/php-banlist/IP-list.txt
+    https://your-server/php-banlist/FQDN-list.txt
+
+Test:
+
+    curl https://your-server/php-banlist/IP-list.txt | head
+
+For feeds exposed to the public internet, set list_acl in config.php
+to a CIDR list and/or enable the token requirement on the settings
+page (then pass ?token=... or X-API-Token: header).
+
+
+8. BACKUPS
+----------
+
+    mysqldump --single-transaction banlist | zstd -19 > banlist-$(date +%F).sql.zst
+
+
+9. UPGRADES
+-----------
+
+Extract the new version next to the old one, carry your config.php
+forward, re-point the symlink, then re-run install.php to apply any
+new migrations.
+
+0.4 ships a schema change (migration 0003 adds api_tokens.can_write
+and the enable_write_api setting), so re-running install.php is
+REQUIRED on this upgrade, not optional. Make sure the DB user has DDL
+privileges at that moment (see section 2 if you revoked them after the
+last install).
+
+    cd /path/to/document-root
+    tar xzf php-banlist-0.4.tar.gz                  # adjust version
+    sudo cp php-banlist/config.php php-banlist-0.4/
+    sudo chown -R apache:apache php-banlist-0.4
+    sudo find php-banlist-0.4 -type d -exec chmod 750 {} \;
+    sudo find php-banlist-0.4 -type f -exec chmod 640 {} \;
+    sudo ln -sfn php-banlist-0.4 php-banlist        # atomic swap
+
+Then open install.php in your browser. It detects pending migrations
+and applies them. Delete install.php afterward.
+
+New in 0.4: config.example.php gained an api_acl block (optional
+source-IP allowlist for the write API). It defaults to empty (allow
+any source), so your carried-forward config.php keeps working as-is;
+the write API itself stays off until enabled in settings anyway.
+
+To roll back, just point the symlink at the previous version:
+
+    sudo ln -sfn php-banlist-0.3 php-banlist        # the prior release
+
+(If the newer version's migrations are incompatible with the older
+code, restore your pre-upgrade SQL dump first.)

@@ -1,0 +1,30 @@
+# php-banlist root .htaccess
+# Drop-in for any LAMP install with AllowOverride All (the default on most
+# distros). If your Apache has AllowOverride locked down, see INSTALL.txt
+# section 4 for the minimum overrides this file needs, or move these
+# directives into a <Directory> block in your vhost.
+
+Options -Indexes -MultiViews
+DirectoryIndex index.php
+
+# Block raw HTTP access to config.php, dotfiles, and source-ish extensions.
+# PHP includes still work because they are server-side require/include.
+<FilesMatch "(^\.|\.(bak|swp|swo|orig|sql|sh|log|md|example|dist|ini|conf)$)">
+    Require all denied
+</FilesMatch>
+<Files "config.php">
+    Require all denied
+</Files>
+
+# Clean URLs for the firewall feeds.
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteRule ^IP-list\.txt$    list.php?type=ip    [L,QSA]
+    RewriteRule ^FQDN-list\.txt$  list.php?type=fqdn  [L,QSA]
+</IfModule>
+
+# Short cache on static CSS.
+<IfModule mod_expires.c>
+    ExpiresActive On
+    ExpiresByType text/css "access plus 1 hour"
+</IfModule>

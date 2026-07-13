@@ -1,0 +1,4 @@
+# Defense in depth: no PHP execution under /assets.
+<FilesMatch "\.(php|phtml|phar)$">
+    Require all denied
+</FilesMatch>

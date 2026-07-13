@@ -1,0 +1,2 @@
+# Server-side PHP includes only. Not for HTTP access.
+Require all denied

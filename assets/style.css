@@ -1,0 +1,482 @@
+/* php-banlist :: dark terminal */
+:root {
+  --bg:        #0a0e0a;
+  --bg-2:      #0e140e;
+  --bg-3:      #121a12;
+  --fg:        #cfe5d2;
+  --fg-dim:    #7aa07f;
+  --fg-dimmer: #4a6a4e;
+  --accent:    #39ff14;
+  --accent-2:  #2cc910;
+  --warn:      #ffb13b;
+  --error:     #ff5c4e;
+  --ok:        #39ff14;
+  --border:    #1f3a23;
+  --border-hi: #2a5a32;
+
+  --mono: "Fira Code", "JetBrains Mono", "Cascadia Code", ui-monospace, Menlo, Consolas, monospace;
+  --sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0; padding: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--sans);
+  font-size: 14px;
+  line-height: 1.5;
+  min-height: 100vh;
+}
+
+body {
+  background:
+    radial-gradient(1200px 600px at 0% -10%, rgba(57,255,20,0.04), transparent 60%),
+    radial-gradient(1000px 500px at 100% 110%, rgba(57,255,20,0.03), transparent 60%),
+    var(--bg);
+}
+
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+.mono, code, pre, input[type=text], input[type=password], textarea, select { font-family: var(--mono); }
+
+.dim { color: var(--fg-dim); }
+
+/* ---- top bar ---- */
+.topbar {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 10px 18px;
+  background: var(--bg-2);
+  border-bottom: 1px solid var(--border);
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.brand { display: flex; align-items: baseline; gap: 10px; }
+.brand .prompt {
+  color: var(--accent);
+  font-family: var(--mono);
+  font-size: 12px;
+  opacity: 0.85;
+}
+.brand a {
+  color: var(--fg);
+  font-family: var(--mono);
+  font-weight: 600;
+  font-size: 16px;
+}
+.nav {
+  display: flex; gap: 14px; align-items: center;
+  font-family: var(--mono);
+  font-size: 13px;
+  flex-wrap: wrap;
+}
+.nav a { color: var(--fg-dim); }
+.nav a:hover { color: var(--accent); }
+.nav .who {
+  color: var(--fg-dim);
+  border-left: 1px solid var(--border);
+  padding-left: 14px;
+}
+.nav .logout { color: var(--error); }
+
+/* ---- main ---- */
+.main {
+  max-width: 1200px;
+  margin: 24px auto;
+  padding: 0 18px;
+}
+
+/* ---- card ---- */
+.card {
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 18px 20px;
+  margin: 0 0 18px;
+  box-shadow: 0 1px 0 rgba(57,255,20,0.04) inset;
+}
+.card h1, .card h2 {
+  margin: 0 0 14px;
+  font-family: var(--mono);
+  font-weight: 600;
+  color: var(--accent);
+  letter-spacing: 0.5px;
+}
+.card h1 { font-size: 18px; }
+.card h2 { font-size: 15px; }
+
+/* ---- dashboard grid ---- */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 18px;
+}
+.grid .card { margin: 0; }
+.big {
+  font-family: var(--mono);
+  font-size: 48px;
+  line-height: 1;
+  color: var(--accent);
+  margin: 8px 0 6px;
+}
+.sub { color: var(--fg-dim); font-family: var(--mono); font-size: 12px; }
+.endpoints {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  padding: 10px 12px;
+  margin: 8px 0;
+  font-size: 12px;
+  overflow-x: auto;
+}
+.endpoints a { color: var(--accent); text-decoration: none; }
+.endpoints a:hover { text-decoration: underline; }
+.duration-help {
+  margin-top: 10px;
+  line-height: 1.8;
+}
+.duration-help code {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  padding: 1px 6px;
+  border-radius: 2px;
+  color: var(--accent);
+  font-size: 11px;
+}
+.duration-help a.dur-pick {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  padding: 1px 6px;
+  border-radius: 2px;
+  color: var(--accent);
+  font-size: 11px;
+  font-family: var(--mono);
+  text-decoration: none;
+  cursor: pointer;
+}
+.duration-help a.dur-pick:hover {
+  background: var(--bg-3);
+  border-color: var(--border-hi);
+  text-decoration: none;
+}
+
+/* ---- forms ---- */
+form.add-form, form.filter {
+  display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end;
+}
+.add-form label, .filter label {
+  display: flex; flex-direction: column; gap: 4px;
+  font-family: var(--mono); font-size: 12px; color: var(--fg-dim);
+  flex: 1; min-width: 180px;
+}
+.add-form label.checkbox, .filter label {
+  flex-direction: row; align-items: center; gap: 8px; flex: 0;
+}
+
+input[type=text], input[type=password], input[type=number], textarea, select {
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 8px 10px;
+  font-size: 13px;
+  outline: none;
+  width: 100%;
+}
+input:focus, textarea:focus, select:focus {
+  border-color: var(--accent-2);
+  box-shadow: 0 0 0 2px rgba(57,255,20,0.15);
+}
+textarea { resize: vertical; font-size: 12px; }
+small { color: var(--fg-dimmer); font-family: var(--mono); font-size: 11px; }
+
+button {
+  background: transparent;
+  color: var(--accent);
+  border: 1px solid var(--border-hi);
+  padding: 8px 16px;
+  font-family: var(--mono);
+  font-size: 13px;
+  cursor: pointer;
+  border-radius: 3px;
+  transition: background 0.1s ease;
+}
+button:hover { background: rgba(57,255,20,0.08); }
+button.danger { color: var(--error); border-color: rgba(255,92,78,0.35); }
+button.danger:hover { background: rgba(255,92,78,0.08); }
+
+form.inline { display: inline-flex; align-items: center; gap: 4px; margin: 0 4px 0 0; }
+form.inline input[type=text], form.inline input[type=password] {
+  width: auto; padding: 4px 6px; font-size: 12px;
+}
+form.inline button { padding: 4px 10px; font-size: 12px; }
+
+/* ---- tables ---- */
+.grid-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 12px;
+  font-family: var(--mono);
+  font-size: 12px;
+}
+.grid-table th, .grid-table td {
+  text-align: left;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+}
+.grid-table th {
+  color: var(--fg-dim);
+  text-transform: lowercase;
+  font-weight: 500;
+  background: var(--bg-3);
+  border-bottom: 1px solid var(--border-hi);
+}
+.grid-table tr:hover td { background: rgba(57,255,20,0.02); }
+.grid-table td.actions { white-space: nowrap; }
+
+/* ---- flash messages ---- */
+.flash {
+  padding: 10px 14px;
+  margin: 0 0 16px;
+  border-radius: 3px;
+  border: 1px solid var(--border);
+  background: var(--bg-2);
+  font-family: var(--mono);
+  font-size: 13px;
+}
+.flash-ok    { color: var(--ok);    border-color: rgba(57,255,20,0.3); }
+.flash-warn  { color: var(--warn);  border-color: rgba(255,177,59,0.3); }
+.flash-error { color: var(--error); border-color: rgba(255,92,78,0.3); }
+
+/* ---- login ---- */
+.login-card {
+  max-width: 400px;
+  margin: 80px auto;
+}
+.login-card form { display: flex; flex-direction: column; gap: 14px; }
+.login-card label { display: flex; flex-direction: column; gap: 4px; font-family: var(--mono); font-size: 12px; color: var(--fg-dim); }
+.login-card button { width: 100%; padding: 10px; font-size: 14px; }
+
+/* ---- tokens display ---- */
+.token-show {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  padding: 10px;
+  word-break: break-all;
+  font-size: 13px;
+}
+
+/* ---- footer ---- */
+.footbar {
+  max-width: 1200px;
+  margin: 32px auto 24px;
+  padding: 12px 18px;
+  border-top: 1px solid var(--border);
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--fg-dimmer);
+  display: flex;
+  gap: 10px;
+}
+
+/* ---- dashboard CTA link-button ---- */
+a.btn {
+  display: inline-block;
+  margin-top: 12px;
+  background: transparent;
+  color: var(--accent);
+  border: 1px solid var(--border-hi);
+  padding: 6px 14px;
+  font-family: var(--mono);
+  font-size: 12px;
+  border-radius: 3px;
+  text-decoration: none;
+  transition: background 0.1s ease;
+}
+a.btn:hover { background: rgba(57,255,20,0.08); text-decoration: none; }
+
+/* ---- settings form ---- */
+form.settings-form {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+.settings-group {
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 14px 16px 18px;
+  margin: 0;
+  background: var(--bg-2);
+}
+.settings-group legend {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--fg-dim);
+  text-transform: lowercase;
+  padding: 0 6px;
+}
+.settings-group .field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+/* Vertical rhythm: space each block below the previous one. A "block" is a
+   stacked .field OR a whole .field-row. Scoped to DIRECT children so the
+   columns inside a row don't each pick up their own top margin (which would
+   misalign them when the first column gets the :first-of-type value). */
+.settings-group > .field,
+.settings-group > .field-row { margin-top: 14px; }
+/* First block tucks up snug under the legend. */
+.settings-group > .field:first-of-type,
+.settings-group > .field-row:first-of-type { margin-top: 4px; }
+.settings-group .field > label {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--fg-dim);
+}
+.settings-group .field label.checkbox {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  color: var(--fg);
+}
+.settings-group .field label.checkbox input { width: auto; }
+.field-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+.field-row .field {
+  flex: 1;
+  min-width: 160px;
+  /* Columns share a single top baseline; the row owns the vertical
+     spacing (see the direct-child rhythm rules above). */
+  margin-top: 0;
+}
+.settings-note {
+  margin: 16px 0 0;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--fg-dimmer);
+  line-height: 1.5;
+}
+.settings-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* ---- JS-free confirmation interstitial ---- */
+.confirm-card { max-width: 520px; }
+.confirm-prompt {
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--fg);
+  line-height: 1.6;
+  margin: 4px 0 18px;
+}
+.confirm-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.confirm-actions form.inline { margin: 0; }
+
+/* ---- link-styled action buttons (JS-free destructive flow) ---- */
+a.btn-del, a.btn-cancel {
+  display: inline-block;
+  font-family: var(--mono);
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: 3px;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background 0.1s ease;
+}
+a.btn-del {
+  color: var(--error);
+  border: 1px solid rgba(255,92,78,0.35);
+}
+a.btn-del:hover { background: rgba(255,92,78,0.08); text-decoration: none; }
+a.btn-cancel {
+  color: var(--fg-dim);
+  border: 1px solid var(--border-hi);
+}
+a.btn-cancel:hover { background: rgba(57,255,20,0.06); text-decoration: none; }
+
+/* ---- remember-me checkbox on login ---- */
+.login-card label.remember {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  color: var(--fg-dim);
+  font-size: 12px;
+}
+.login-card label.remember input { width: auto; }
+
+/* ---- pagination (JS-free prev/next links) ---- */
+.pager {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  margin-top: 14px;
+  font-family: var(--mono);
+  font-size: 12px;
+}
+.pager-info { color: var(--fg-dimmer); }
+a.pager-link {
+  display: inline-block;
+  padding: 4px 10px;
+  border: 1px solid var(--border-hi);
+  border-radius: 3px;
+  text-decoration: none;
+  color: var(--fg-dim);
+  transition: background 0.1s ease;
+}
+a.pager-link:hover { background: rgba(57,255,20,0.06); text-decoration: none; }
+.pager-link.disabled {
+  padding: 4px 10px;
+  border: 1px solid transparent;
+  color: var(--fg-dimmer);
+  opacity: 0.4;
+}
+
+/* Replaces the CSP-dead style="max-width:600px" attribute on profile tables
+   (inline style attributes are blocked by style-src 'self', same bug class
+   as the dead inline handlers fixed in v0.3). */
+.table-narrow { max-width: 600px; }
+
+/* ---- "this device" badge on the remembered-devices list ---- */
+.badge {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 7px;
+  border: 1px solid var(--border-hi);
+  border-radius: 3px;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--fg-dim);
+  vertical-align: 1px;
+}
+
+/* ---- inline checkbox row on the token create form ---- */
+label.checkbox-inline {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--fg-dim);
+}
+label.checkbox-inline input { width: auto; }
+
+/* Small screens */
+@media (max-width: 720px) {
+  .topbar { flex-direction: column; align-items: flex-start; }
+  .grid-table { font-size: 11px; }
+  .grid-table th, .grid-table td { padding: 6px 6px; }
+  .nav .who { border-left: none; padding-left: 0; }
+  .field-row { flex-direction: column; gap: 14px; }
+}

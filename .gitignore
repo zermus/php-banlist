@@ -1,0 +1,8 @@
+# Local configuration (contains DB credentials and secrets)
+config.php
+
+# OS / editor junk
+.DS_Store
+Thumbs.db
+*.swp
+*~
