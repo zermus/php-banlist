@@ -43,6 +43,9 @@ server {
     # Serve static files only; anything executable-looking is denied.
     location ^~ /php-banlist/assets/ {
         location ~ \.(php|phtml|phar)$ { deny all; }
+        # ^~ skips the top-level regex locations, so the dotfile deny below
+        # must be repeated here (covers assets/.htaccess).
+        location ~ /\. { deny all; }
         # root .htaccess: ExpiresByType text/css "access plus 1 hour"
         location ~ \.css$ { expires 1h; }
     }
@@ -63,12 +66,14 @@ server {
     # root .htaccess mod_rewrite: clean URLs for the firewall feeds
     #   RewriteRule ^IP-list\.txt$    list.php?type=ip    [L,QSA]
     #   RewriteRule ^FQDN-list\.txt$  list.php?type=fqdn  [L,QSA]
-    # $is_args$args preserves extra query params (QSA), e.g. ?token=...
+    # When the replacement has query args, nginx appends the original query
+    # string after them automatically — that is the QSA behavior, so extra
+    # params like ?token=... survive. Do NOT add $args yourself.
     location = /php-banlist/IP-list.txt {
-        rewrite ^ /php-banlist/list.php?type=ip$is_args$args last;
+        rewrite ^ /php-banlist/list.php?type=ip last;
     }
     location = /php-banlist/FQDN-list.txt {
-        rewrite ^ /php-banlist/list.php?type=fqdn$is_args$args last;
+        rewrite ^ /php-banlist/list.php?type=fqdn last;
     }
 
     # PHP handler. No .htaccess equivalent (Apache uses mod_php/proxy_fcgi).
