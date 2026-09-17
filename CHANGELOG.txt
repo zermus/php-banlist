@@ -19,6 +19,27 @@ URLs stable and makes rollback a one-command operation.
 Nothing yet.
 
 
+[0.6] - 2026-09-17
+------------------
+
+Ban-scope safety release. NO schema changes: upgrading from 0.5 is a
+file swap; re-running install.php is not required.
+
+Security
+........
+- IP ban validation now rejects IPv4 and IPv6 /0 CIDRs, including
+  non-canonical spellings whose prefix still covers the entire address
+  family. The shared validator protects both web UI and write API adds,
+  and the feed suppresses any unsafe legacy /0 row already in the database.
+- Source-IP ACL matching now rejects malformed and out-of-range prefix
+  lengths rather than coercing them or risking an invalid packed-address
+  offset.
+
+Added
+.....
+- Focused regression checks for IP/CIDR normalization and ACL matching.
+
+
 [0.5] - 2026-07-12
 ------------------
 
