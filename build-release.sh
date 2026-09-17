@@ -7,7 +7,7 @@
 # Run from the project root on a machine with tar (and gh for --publish).
 set -euo pipefail
 
-VERSION="0.5"
+VERSION="0.6"
 STAGE="php-banlist-${VERSION}"
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 OUT="${ROOT}/releases"

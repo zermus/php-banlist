@@ -17,8 +17,8 @@ any previous version; a symlink named `php-banlist` points to the
 active release. This makes rollback a one-command symlink re-point.
 
     cd /path/to/document-root
-    tar xzf php-banlist-0.5.tar.gz
-    sudo ln -s php-banlist-0.5 php-banlist
+    tar xzf php-banlist-0.6.tar.gz
+    sudo ln -s php-banlist-0.6 php-banlist
     cd php-banlist
     sudo chown -R apache:apache .
     sudo find . -type d -exec chmod 750 {} \;
@@ -150,19 +150,19 @@ Extract the new version next to the old one, carry your config.php
 forward, re-point the symlink, then re-run install.php to apply any
 new migrations.
 
-0.5 ships NO schema changes, so upgrading from 0.4 is just the file
+0.6 ships NO schema changes, so upgrading from 0.5 is just the file
 swap below — re-running install.php is harmless but not required.
 (Upgrading from 0.3 or earlier still needs install.php for migration
 0003; make sure the DB user has DDL privileges at that moment — see
 section 2 if you revoked them after the last install.)
 
     cd /path/to/document-root
-    tar xzf php-banlist-0.5.tar.gz                  # adjust version
-    sudo cp php-banlist/config.php php-banlist-0.5/
-    sudo chown -R apache:apache php-banlist-0.5
-    sudo find php-banlist-0.5 -type d -exec chmod 750 {} \;
-    sudo find php-banlist-0.5 -type f -exec chmod 640 {} \;
-    sudo ln -sfn php-banlist-0.5 php-banlist        # atomic swap
+    tar xzf php-banlist-0.6.tar.gz                  # adjust version
+    sudo cp php-banlist/config.php php-banlist-0.6/
+    sudo chown -R apache:apache php-banlist-0.6
+    sudo find php-banlist-0.6 -type d -exec chmod 750 {} \;
+    sudo find php-banlist-0.6 -type f -exec chmod 640 {} \;
+    sudo ln -sfn php-banlist-0.6 php-banlist        # atomic swap
 
 If migrations are pending, open install.php in your browser to apply
 them. Delete install.php afterward.

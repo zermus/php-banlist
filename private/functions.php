@@ -135,11 +135,18 @@ function ip_in_cidr(string $ip, string $cidr): bool {
         $cidr .= filter_var($cidr, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6) ? '/128' : '/32';
     }
     [$subnet, $mask] = explode('/', $cidr, 2);
+    if (!ctype_digit($mask)) {
+        return false;
+    }
     $mask = (int)$mask;
 
     $ip_bin     = @inet_pton($ip);
     $subnet_bin = @inet_pton($subnet);
     if ($ip_bin === false || $subnet_bin === false || strlen($ip_bin) !== strlen($subnet_bin)) {
+        return false;
+    }
+    $max_mask = strlen($ip_bin) === 16 ? 128 : 32;
+    if ($mask < 0 || $mask > $max_mask) {
         return false;
     }
     $bytes = intdiv($mask, 8);
@@ -157,7 +164,8 @@ function ip_in_cidr(string $ip, string $cidr): bool {
 /* -------------------- IP / CIDR / URL validation -------------------- */
 
 /**
- * Validates a single IP or CIDR (v4 or v6). Returns normalized string or null.
+ * Validates a ban target containing one IP or CIDR (v4 or v6). CIDRs that
+ * cover an entire address family are rejected. Returns normalized string or null.
  */
 function normalize_ip_or_cidr(string $input): ?string {
     $input = trim($input);
@@ -172,8 +180,9 @@ function normalize_ip_or_cidr(string $input): ?string {
         $bin = @inet_pton($addr);
         if ($bin === false) return null;
         $is_v6 = strlen($bin) === 16;
-        if ($is_v6 && ($mask < 0 || $mask > 128)) return null;
-        if (!$is_v6 && ($mask < 0 || $mask > 32))  return null;
+        if ($mask === 0) return null;
+        if ($is_v6 && $mask > 128) return null;
+        if (!$is_v6 && $mask > 32) return null;
         return inet_ntop($bin) . '/' . $mask;
     }
 

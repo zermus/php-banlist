@@ -1,7 +1,7 @@
 php-banlist
 ===========
 
-Version 0.5. Self-hosted manager for dynamic firewall banlists.
+Version 0.6. Self-hosted manager for dynamic firewall banlists.
 Two feed URLs (rewritten by the web server to list.php):
 
   <base>/IP-list.txt    one IPv4/IPv6 address or CIDR per line
