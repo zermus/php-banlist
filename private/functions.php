@@ -164,8 +164,9 @@ function ip_in_cidr(string $ip, string $cidr): bool {
 /* -------------------- IP / CIDR / URL validation -------------------- */
 
 /**
- * Validates a ban target containing one IP or CIDR (v4 or v6). CIDRs that
- * cover an entire address family are rejected. Returns normalized string or null.
+ * Validates a ban target containing one IP or CIDR (v4 or v6).
+ * Returns the normalized string or null. Ban-scope policy is applied separately
+ * so legacy broad entries can still be normalized for removal.
  */
 function normalize_ip_or_cidr(string $input): ?string {
     $input = trim($input);
@@ -180,7 +181,6 @@ function normalize_ip_or_cidr(string $input): ?string {
         $bin = @inet_pton($addr);
         if ($bin === false) return null;
         $is_v6 = strlen($bin) === 16;
-        if ($mask === 0) return null;
         if ($is_v6 && $mask > 128) return null;
         if (!$is_v6 && $mask > 32) return null;
         return inet_ntop($bin) . '/' . $mask;
@@ -189,6 +189,130 @@ function normalize_ip_or_cidr(string $input): ?string {
     $bin = @inet_pton($input);
     if ($bin === false) return null;
     return inet_ntop($bin);
+}
+
+function cidr_guardrail_value($value, int $default, int $max): int {
+    $raw = trim((string)$value);
+    if ($raw === '' || !ctype_digit($raw)) {
+        return $default;
+    }
+    return max(0, min($max, (int)$raw));
+}
+
+/**
+ * Return safe, non-conflicting CIDR prefix guard rails. Lower prefix lengths
+ * are broader. The hard cutoff can never fall below /0, and warning cutoffs
+ * are raised to the hard cutoff when stored settings conflict.
+ */
+function cidr_guardrails(?array $values = null): array {
+    if ($values === null) {
+        $values = [
+            'ipv4_warning_prefix' => setting('ipv4_warning_prefix', '24'),
+            'ipv4_hard_prefix'    => setting('ipv4_hard_prefix', '0'),
+            'ipv6_warning_prefix' => setting('ipv6_warning_prefix', '64'),
+            'ipv6_hard_prefix'    => setting('ipv6_hard_prefix', '0'),
+        ];
+    }
+
+    $v4_hard = cidr_guardrail_value($values['ipv4_hard_prefix'] ?? null, 0, 32);
+    $v6_hard = cidr_guardrail_value($values['ipv6_hard_prefix'] ?? null, 0, 128);
+    $v4_warn = cidr_guardrail_value($values['ipv4_warning_prefix'] ?? null, 24, 32);
+    $v6_warn = cidr_guardrail_value($values['ipv6_warning_prefix'] ?? null, 64, 128);
+
+    return [
+        'ipv4_warning_prefix' => max($v4_hard, $v4_warn),
+        'ipv4_hard_prefix'    => $v4_hard,
+        'ipv6_warning_prefix' => max($v6_hard, $v6_warn),
+        'ipv6_hard_prefix'    => $v6_hard,
+    ];
+}
+
+/**
+ * Classify one target as invalid, allowed, confirmation-required, or rejected.
+ */
+function ip_ban_policy(string $input, ?array $guardrails = null): array {
+    $normalized = normalize_ip_or_cidr($input);
+    if ($normalized === null) {
+        return ['status' => 'invalid', 'normalized' => null, 'family' => null, 'prefix' => null];
+    }
+    if (strpos($normalized, '/') === false) {
+        return ['status' => 'allow', 'normalized' => $normalized, 'family' => null, 'prefix' => null];
+    }
+
+    [$address, $prefix_raw] = explode('/', $normalized, 2);
+    $prefix = (int)$prefix_raw;
+    $family = strlen((string)inet_pton($address)) === 16 ? 'ipv6' : 'ipv4';
+    $rails = $guardrails ?? cidr_guardrails();
+    $hard = $rails[$family . '_hard_prefix'];
+    $warning = $rails[$family . '_warning_prefix'];
+    $status = $prefix <= $hard ? 'reject' : ($prefix <= $warning ? 'warn' : 'allow');
+
+    return [
+        'status'     => $status,
+        'normalized' => $normalized,
+        'family'     => $family,
+        'prefix'     => $prefix,
+    ];
+}
+
+function ip_ban_preflight(array $lines, ?array $guardrails = null): array {
+    $result = ['entries' => [], 'warnings' => [], 'rejected' => [], 'invalid' => []];
+    foreach ($lines as $line) {
+        $line = trim((string)$line);
+        if ($line === '' || $line[0] === '#') continue;
+        $check = ip_ban_policy($line, $guardrails);
+        if ($check['status'] === 'invalid') {
+            $result['invalid'][] = $line;
+            continue;
+        }
+        if ($check['status'] === 'reject') {
+            $result['rejected'][] = $check['normalized'];
+            continue;
+        }
+        $result['entries'][] = $check;
+        if ($check['status'] === 'warn') {
+            $result['warnings'][] = $check['normalized'];
+        }
+    }
+    return $result;
+}
+
+function broad_subnet_override_requested(array $input): bool {
+    return array_key_exists('confirm_broad_subnets', $input)
+        && is_string($input['confirm_broad_subnets'])
+        && $input['confirm_broad_subnets'] === 'yes';
+}
+
+function broad_add_confirmation_issue(array $payload): string {
+    $token = bin2hex(random_bytes(32));
+    $_SESSION['broad_add_confirmation'] = [
+        'token_hash' => hash('sha256', $token),
+        'expires'    => time() + 600,
+        'payload'    => $payload,
+    ];
+    return $token;
+}
+
+function broad_add_confirmation_consume(string $token): ?array {
+    $stored = $_SESSION['broad_add_confirmation'] ?? null;
+    unset($_SESSION['broad_add_confirmation']);
+    if (!is_array($stored) || !isset($stored['token_hash'], $stored['expires'], $stored['payload'])) {
+        return null;
+    }
+    if ((int)$stored['expires'] < time()
+        || !hash_equals((string)$stored['token_hash'], hash('sha256', $token))
+        || !is_array($stored['payload'])) {
+        return null;
+    }
+    return $stored['payload'];
+}
+
+function broad_add_confirmation_is_current(array $payload, array $preflight, array $guardrails): bool {
+    return isset($payload['warnings'], $payload['guardrails'])
+        && is_array($payload['warnings'])
+        && is_array($payload['guardrails'])
+        && $payload['warnings'] === $preflight['warnings']
+        && $payload['guardrails'] === $guardrails;
 }
 
 /**

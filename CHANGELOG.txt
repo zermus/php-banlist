@@ -27,17 +27,28 @@ file swap; re-running install.php is not required.
 
 Security
 ........
-- IP ban validation now rejects IPv4 and IPv6 /0 CIDRs, including
-  non-canonical spellings whose prefix still covers the entire address
-  family. The shared validator protects both web UI and write API adds,
-  and the feed suppresses any unsafe legacy /0 row already in the database.
+- Replaced the fixed /0-only add policy with centralized IPv4 and IPv6
+  subnet guard rails. Defaults require confirmation for IPv4 /24-or-broader
+  and IPv6 /64-or-broader, while /0 remains an unconditional hard rejection.
+- Web broad-subnet adds use a server-rendered, CSRF-protected, expiring,
+  one-use confirmation bound to the exact submitted values. Confirmed adds
+  and guard-rail setting changes are audit-logged.
+- API IP adds preflight the whole request. Invalid or hard-rejected entries
+  prevent every write, warning-level entries require the exact
+  confirm_broad_subnets=yes field, and accepted bulk writes are transactional.
+- Malformed or conflicting stored settings are clamped to safe defaults;
+  feeds also suppress legacy entries at or broader than the active hard cutoff.
 - Source-IP ACL matching now rejects malformed and out-of-range prefix
   lengths rather than coercing them or risking an invalid packed-address
   offset.
 
 Added
 .....
-- Focused regression checks for IP/CIDR normalization and ACL matching.
+- Superadmin settings for separate IPv4/IPv6 warning and hard-rejection CIDR
+  prefix lengths, with explicit prefix-length guidance.
+- Focused regression checks for cutoff boundaries, IPv4/IPv6, malformed and
+  conflicting settings, mixed bulk preflight, exact API override handling,
+  confirmation replay/bypass, and unconditional /0 safety.
 
 
 [0.5] - 2026-07-12

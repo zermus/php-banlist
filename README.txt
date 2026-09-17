@@ -35,6 +35,8 @@ FEATURES
   - Optional API tokens (SHA-256 hashed) and source-IP ACL for feeds
   - Write API: add/remove bans over HTTP with a token (off by default,
     double-gated: global setting + per-token write flag)
+  - Configurable IPv4/IPv6 CIDR guard rails: broad ranges require explicit
+    confirmation and configured hard cutoffs can never permit /0
   - Paginated ban and audit views (100/page, JS-free prev/next links)
   - Argon2id passwords, CSRF tokens, session pinning, brute-force
     lockout, strict CSP, HSTS
@@ -92,6 +94,13 @@ token= field. Form-encoded or JSON bodies.
     reason    optional, add only (<=255 chars)
     duration  optional, add only: 30s 30m 2h 7d 2w 1mo 1y p
               (blank = system default from settings)
+    confirm_broad_subnets
+              optional; must be exactly yes when an IP add is at or broader
+              than the configured warning cutoff
+
+  IP additions are preflighted as a whole request. Any invalid or
+  hard-rejected entry rejects the request without writes. The broad-subnet
+  override never bypasses a hard cutoff, including the mandatory /0 floor.
 
   Examples:
     curl -X POST -H 'X-API-Token: TOKEN' \

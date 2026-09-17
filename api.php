@@ -19,8 +19,9 @@
  *   value    = entry, or several separated by newlines/commas (required)
  *   reason   = free text, add only   (optional, <=255 chars)
  *   duration = 30m 2h 7d 1mo 1y p    (optional, add only; blank = default)
+ *   confirm_broad_subnets = yes       (required exactly for warning-level IP adds)
  *
- * Responses: JSON. 200 on success, 400/401/403/405 otherwise.
+ * Responses: JSON. 200 on success, 400/401/403/405/409 otherwise.
  *   add:    {"ok":true,"added":N,"invalid":[...]}
  *   remove: {"ok":true,"removed":N,"not_found":[...],"invalid":[...]}
  *
@@ -150,29 +151,81 @@ if ($action === 'add') {
     }
     $exp = $duration['permanent'] ? null : $duration['expires_at'];
 
-    $stmt = db()->prepare(
+    $entries = [];
+    $invalid = [];
+    $warnings = [];
+    if ($type === 'ip') {
+        $preflight = ip_ban_preflight($lines);
+        if ($preflight['invalid'] || $preflight['rejected']) {
+            api_out(400, [
+                'ok'       => false,
+                'error'    => 'request rejected; no entries were added',
+                'invalid'  => array_slice($preflight['invalid'], 0, 20),
+                'rejected' => array_slice($preflight['rejected'], 0, 20),
+            ]);
+        }
+        $entries = $preflight['entries'];
+        $warnings = $preflight['warnings'];
+        if ($warnings && !broad_subnet_override_requested($in)) {
+            api_out(409, [
+                'ok'       => false,
+                'error'    => 'broad subnet confirmation required; resend with confirm_broad_subnets=yes',
+                'warnings' => array_slice($warnings, 0, 20),
+            ]);
+        }
+    } else {
+        foreach ($lines as $line) {
+            $line = trim($line);
+            if ($line === '' || $line[0] === '#') continue;
+            $norm = normalize_hostname($line);
+            if ($norm === null) {
+                $invalid[] = $line;
+            } else {
+                $entries[] = ['normalized' => $norm, 'status' => 'allow'];
+            }
+        }
+        if ($invalid) {
+            api_out(400, [
+                'ok'      => false,
+                'error'   => 'request rejected; no entries were added',
+                'invalid' => array_slice($invalid, 0, 20),
+            ]);
+        }
+    }
+    if (!$entries) {
+        api_out(400, ['ok' => false, 'error' => 'no valid entries supplied']);
+    }
+
+    $pdo = db();
+    $stmt = $pdo->prepare(
         "INSERT INTO {$table} ({$column}, reason, created_by, expires_at)
          VALUES (?, ?, ?, ?)
          ON DUPLICATE KEY UPDATE reason = VALUES(reason),
                                  created_by = VALUES(created_by),
                                  expires_at = VALUES(expires_at)"
     );
-
-    $added = 0; $bad = [];
-    foreach ($lines as $line) {
-        $line = trim($line);
-        if ($line === '' || $line[0] === '#') continue;
-        $norm = $normalize($line);
-        if ($norm === null) {
-            $bad[] = $line;
-            continue;
+    $pdo->beginTransaction();
+    try {
+        foreach ($entries as $entry) {
+            $norm = $entry['normalized'];
+            $stmt->execute([$norm, $reason !== '' ? $reason : null, $actor_uid, $exp]);
+            audit_log_write($actor_uid, $actor, "api_{$type}_ban_add", $norm,
+                            $exp ? "expires={$exp}" : 'permanent');
+            if ($type === 'ip' && $entry['status'] === 'warn') {
+                audit_log_write($actor_uid, $actor, 'api_broad_ip_ban_confirm', $norm,
+                                "{$entry['family']} prefix=/{$entry['prefix']}");
+            }
         }
-        $stmt->execute([$norm, $reason !== '' ? $reason : null, $actor_uid, $exp]);
-        $added++;
-        audit_log_write($actor_uid, $actor, "api_{$type}_ban_add", $norm,
-                        $exp ? "expires={$exp}" : 'permanent');
+        $pdo->commit();
+    } catch (Throwable $e) {
+        if ($pdo->inTransaction()) $pdo->rollBack();
+        throw $e;
     }
-    api_out(200, ['ok' => true, 'added' => $added, 'invalid' => array_slice($bad, 0, 20)]);
+    api_out(200, [
+        'ok'      => true,
+        'added'   => count($entries),
+        'invalid' => array_slice($invalid, 0, 20),
+    ]);
 }
 
 // action === 'remove'
