@@ -1,7 +1,7 @@
 php-banlist
 ===========
 
-Version 0.6. Self-hosted manager for dynamic firewall banlists.
+Version 0.6.1. Self-hosted manager for dynamic firewall banlists.
 Two feed URLs (rewritten by the web server to list.php):
 
   <base>/IP-list.txt    one IPv4/IPv6 address or CIDR per line
@@ -36,7 +36,7 @@ FEATURES
   - Write API: add/remove bans over HTTP with a token (off by default,
     double-gated: global setting + per-token write flag)
   - Configurable IPv4/IPv6 CIDR guard rails: broad ranges require explicit
-    confirmation and configured hard cutoffs can never permit /0
+    confirmation; whole-family targets are disabled by default
   - Paginated ban and audit views (100/page, JS-free prev/next links)
   - Argon2id passwords, CSRF tokens, session pinning, brute-force
     lockout, strict CSP, HSTS

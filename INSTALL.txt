@@ -17,8 +17,8 @@ any previous version; a symlink named `php-banlist` points to the
 active release. This makes rollback a one-command symlink re-point.
 
     cd /path/to/document-root
-    tar xzf php-banlist-0.6.tar.gz
-    sudo ln -s php-banlist-0.6 php-banlist
+    tar xzf php-banlist-0.6.1.tar.gz
+    sudo ln -s php-banlist-0.6.1 php-banlist
     cd php-banlist
     sudo chown -R apache:apache .
     sudo find . -type d -exec chmod 750 {} \;
@@ -150,24 +150,22 @@ Extract the new version next to the old one, carry your config.php
 forward, re-point the symlink, then re-run install.php to apply any
 new migrations.
 
-0.6 ships NO schema changes, so upgrading from 0.5 is just the file
-swap below — re-running install.php is harmless but not required. New CIDR
-guard-rail settings use safe defaults without a migration: warning at IPv4
-/24-or-broader and IPv6 /64-or-broader. IPv4/IPv6 /0 and unspecified targets
-are rejected and suppressed from feeds unless a superadmin explicitly enables
-them; even then, every addition requires the one-use web confirmation or exact
-API override. Superadmins can adjust these controls on the settings page.
-(Upgrading from 0.3 or earlier still needs install.php for migration
-0003; make sure the DB user has DDL privileges at that moment — see
-section 2 if you revoked them after the last install.)
+0.6.1 ships NO schema changes, so upgrading from 0.6 is just the file
+swap below — re-running install.php is harmless but not required. IPv4/IPv6 /0
+and unspecified targets are rejected and suppressed from feeds unless a
+superadmin explicitly enables them; even then, every addition requires the
+one-use web confirmation or exact API override. Superadmins can adjust these
+controls on the settings page. (Upgrading from 0.3 or earlier still needs
+install.php for migration 0003; make sure the DB user has DDL privileges at
+that moment — see section 2 if you revoked them after the last install.)
 
     cd /path/to/document-root
-    tar xzf php-banlist-0.6.tar.gz                  # adjust version
-    sudo cp php-banlist/config.php php-banlist-0.6/
-    sudo chown -R apache:apache php-banlist-0.6
-    sudo find php-banlist-0.6 -type d -exec chmod 750 {} \;
-    sudo find php-banlist-0.6 -type f -exec chmod 640 {} \;
-    sudo ln -sfn php-banlist-0.6 php-banlist        # atomic swap
+    tar xzf php-banlist-0.6.1.tar.gz                # adjust version
+    sudo cp php-banlist/config.php php-banlist-0.6.1/
+    sudo chown -R apache:apache php-banlist-0.6.1
+    sudo find php-banlist-0.6.1 -type d -exec chmod 750 {} \;
+    sudo find php-banlist-0.6.1 -type f -exec chmod 640 {} \;
+    sudo ln -sfn php-banlist-0.6.1 php-banlist      # atomic swap
 
 If migrations are pending, open install.php in your browser to apply
 them. Delete install.php afterward.
@@ -178,7 +176,7 @@ GET /logout.php anywhere, that request now just redirects.
 
 To roll back, just point the symlink at the previous version:
 
-    sudo ln -sfn php-banlist-0.3 php-banlist        # the prior release
+    sudo ln -sfn php-banlist-0.6 php-banlist        # the prior release
 
 (If the newer version's migrations are incompatible with the older
 code, restore your pre-upgrade SQL dump first.)
