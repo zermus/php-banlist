@@ -20,7 +20,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($confirmed) {
             $payload = broad_add_confirmation_consume((string)($_POST['confirmation_token'] ?? ''));
             if ($payload === null) {
-                flash('error', 'Broad-subnet confirmation expired, was already used, or is invalid. Nothing was added.');
+                flash('error', 'Broad or dangerous-target confirmation expired, was already used, or is invalid. Nothing was added.');
                 header('Location: ' . $base . '/ip-bans.php' . list_state_qs());
                 exit;
             }
@@ -70,14 +70,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'warnings' => $preflight['warnings'],
                 'guardrails' => $guardrails,
             ]);
-            $page_title = 'confirm broad subnets';
+            $page_title = 'confirm dangerous IP targets';
             include __DIR__ . '/private/header.php';
             ?>
             <section class="card confirm-card">
-              <h1>confirm broad subnet ban</h1>
-              <p class="confirm-prompt">The following CIDRs are at or broader than the warning cutoff:</p>
+              <h1>confirm broad or dangerous IP ban</h1>
+              <p class="confirm-prompt">The following targets require deliberate confirmation:</p>
               <pre class="confirm-targets"><?= e(implode("\n", $preflight['warnings'])) ?></pre>
-              <p class="confirm-prompt">This can block large address ranges. Confirm this exact one-time request?</p>
+              <p class="confirm-prompt">This can block large address ranges or entire address families. Confirm this exact one-time request?</p>
               <div class="confirm-actions">
                 <form method="post" class="inline">
                   <?= csrf_field() ?>

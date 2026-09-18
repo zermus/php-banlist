@@ -169,7 +169,7 @@ if ($action === 'add') {
         if ($warnings && !broad_subnet_override_requested($in)) {
             api_out(409, [
                 'ok'       => false,
-                'error'    => 'broad subnet confirmation required; resend with confirm_broad_subnets=yes',
+                'error'    => 'broad or dangerous IP target confirmation required; resend with confirm_broad_subnets=yes',
                 'warnings' => array_slice($warnings, 0, 20),
             ]);
         }

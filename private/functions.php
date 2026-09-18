@@ -199,18 +199,23 @@ function cidr_guardrail_value($value, int $default, int $max): int {
     return max(0, min($max, (int)$raw));
 }
 
+function whole_family_targets_enabled($value): bool {
+    return is_string($value) && $value === '1';
+}
+
 /**
- * Return safe, non-conflicting CIDR prefix guard rails. Lower prefix lengths
- * are broader. The hard cutoff can never fall below /0, and warning cutoffs
- * are raised to the hard cutoff when stored settings conflict.
+ * Return safe, non-conflicting CIDR policy settings. Lower prefix lengths are
+ * broader, and warning cutoffs are raised to the hard cutoff when settings
+ * conflict. Whole-family targets require an exact, opt-in setting value.
  */
 function cidr_guardrails(?array $values = null): array {
     if ($values === null) {
         $values = [
-            'ipv4_warning_prefix' => setting('ipv4_warning_prefix', '24'),
-            'ipv4_hard_prefix'    => setting('ipv4_hard_prefix', '0'),
-            'ipv6_warning_prefix' => setting('ipv6_warning_prefix', '64'),
-            'ipv6_hard_prefix'    => setting('ipv6_hard_prefix', '0'),
+            'ipv4_warning_prefix'       => setting('ipv4_warning_prefix', '24'),
+            'ipv4_hard_prefix'          => setting('ipv4_hard_prefix', '0'),
+            'ipv6_warning_prefix'       => setting('ipv6_warning_prefix', '64'),
+            'ipv6_hard_prefix'          => setting('ipv6_hard_prefix', '0'),
+            'allow_whole_family_targets' => setting('allow_whole_family_targets', '0'),
         ];
     }
 
@@ -220,10 +225,13 @@ function cidr_guardrails(?array $values = null): array {
     $v6_warn = cidr_guardrail_value($values['ipv6_warning_prefix'] ?? null, 64, 128);
 
     return [
-        'ipv4_warning_prefix' => max($v4_hard, $v4_warn),
-        'ipv4_hard_prefix'    => $v4_hard,
-        'ipv6_warning_prefix' => max($v6_hard, $v6_warn),
-        'ipv6_hard_prefix'    => $v6_hard,
+        'ipv4_warning_prefix'        => max($v4_hard, $v4_warn),
+        'ipv4_hard_prefix'           => $v4_hard,
+        'ipv6_warning_prefix'        => max($v6_hard, $v6_warn),
+        'ipv6_hard_prefix'           => $v6_hard,
+        'allow_whole_family_targets' => whole_family_targets_enabled(
+            $values['allow_whole_family_targets'] ?? null
+        ),
     ];
 }
 
@@ -235,17 +243,26 @@ function ip_ban_policy(string $input, ?array $guardrails = null): array {
     if ($normalized === null) {
         return ['status' => 'invalid', 'normalized' => null, 'family' => null, 'prefix' => null];
     }
-    if (strpos($normalized, '/') === false) {
-        return ['status' => 'allow', 'normalized' => $normalized, 'family' => null, 'prefix' => null];
-    }
 
-    [$address, $prefix_raw] = explode('/', $normalized, 2);
-    $prefix = (int)$prefix_raw;
-    $family = strlen((string)inet_pton($address)) === 16 ? 'ipv6' : 'ipv4';
+    $parts = explode('/', $normalized, 2);
+    $address = $parts[0];
+    $packed = (string)inet_pton($address);
+    $family = strlen($packed) === 16 ? 'ipv6' : 'ipv4';
+    $prefix = isset($parts[1]) ? (int)$parts[1] : null;
+    $host_prefix = $family === 'ipv6' ? 128 : 32;
+    $unspecified = $packed === str_repeat("\0", strlen($packed));
+    $whole_family = $prefix === 0 || ($unspecified && ($prefix === null || $prefix === $host_prefix));
     $rails = $guardrails ?? cidr_guardrails();
-    $hard = $rails[$family . '_hard_prefix'];
-    $warning = $rails[$family . '_warning_prefix'];
-    $status = $prefix <= $hard ? 'reject' : ($prefix <= $warning ? 'warn' : 'allow');
+
+    if ($whole_family) {
+        $status = ($rails['allow_whole_family_targets'] ?? false) ? 'warn' : 'reject';
+    } elseif ($prefix === null) {
+        $status = 'allow';
+    } else {
+        $hard = $rails[$family . '_hard_prefix'];
+        $warning = $rails[$family . '_warning_prefix'];
+        $status = $prefix <= $hard ? 'reject' : ($prefix <= $warning ? 'warn' : 'allow');
+    }
 
     return [
         'status'     => $status,
@@ -253,6 +270,13 @@ function ip_ban_policy(string $input, ?array $guardrails = null): array {
         'family'     => $family,
         'prefix'     => $prefix,
     ];
+}
+
+function ip_ban_feed_target(string $input, ?array $guardrails = null): ?string {
+    $check = ip_ban_policy($input, $guardrails);
+    return $check['status'] === 'allow' || $check['status'] === 'warn'
+        ? $check['normalized']
+        : null;
 }
 
 function ip_ban_preflight(array $lines, ?array $guardrails = null): array {

@@ -29,15 +29,19 @@ Security
 ........
 - Replaced the fixed /0-only add policy with centralized IPv4 and IPv6
   subnet guard rails. Defaults require confirmation for IPv4 /24-or-broader
-  and IPv6 /64-or-broader, while /0 remains an unconditional hard rejection.
-- Web broad-subnet adds use a server-rendered, CSRF-protected, expiring,
-  one-use confirmation bound to the exact submitted values. Confirmed adds
-  and guard-rail setting changes are audit-logged.
+  and IPv6 /64-or-broader.
+- IPv4/IPv6 /0 plus bare and host-prefix unspecified addresses are rejected
+  and suppressed from feeds by default. An audited superadmin switch can enable
+  them, but they always remain confirmation-required.
+- Web broad or dangerous IP adds use a server-rendered, CSRF-protected,
+  expiring, one-use confirmation bound to the exact values and current policy.
+  Confirmed adds and guard-rail setting changes are audit-logged.
 - API IP adds preflight the whole request. Invalid or hard-rejected entries
   prevent every write, warning-level entries require the exact
   confirm_broad_subnets=yes field, and accepted bulk writes are transactional.
-- Malformed or conflicting stored settings are clamped to safe defaults;
-  feeds also suppress legacy entries at or broader than the active hard cutoff.
+- Malformed or conflicting stored settings are clamped to safe defaults; only
+  the exact stored value 1 enables whole-family targets, and feeds apply the
+  current policy to legacy rows.
 - Source-IP ACL matching now rejects malformed and out-of-range prefix
   lengths rather than coercing them or risking an invalid packed-address
   offset.
@@ -46,9 +50,9 @@ Added
 .....
 - Superadmin settings for separate IPv4/IPv6 warning and hard-rejection CIDR
   prefix lengths, with explicit prefix-length guidance.
-- Focused regression checks for cutoff boundaries, IPv4/IPv6, malformed and
-  conflicting settings, mixed bulk preflight, exact API override handling,
-  confirmation replay/bypass, and unconditional /0 safety.
+- Focused regression checks for cutoff boundaries, IPv4/IPv6 unspecified and
+  /0 targets, malformed settings, mixed bulk preflight, exact API override
+  handling, confirmation replay/bypass, policy changes, and feed suppression.
 
 
 [0.5] - 2026-07-12
