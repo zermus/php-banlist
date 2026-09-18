@@ -15,26 +15,89 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exit;
     }
     $action = (string)($_POST['action'] ?? '');
-    if ($action === 'add') {
-        $raw     = (string)($_POST['ip'] ?? '');
-        $reason  = trim((string)($_POST['reason'] ?? ''));
-        $dur_in  = (string)($_POST['duration'] ?? '');
+    if ($action === 'add' || $action === 'confirm_broad_add') {
+        $confirmed = $action === 'confirm_broad_add';
+        if ($confirmed) {
+            $payload = broad_add_confirmation_consume((string)($_POST['confirmation_token'] ?? ''));
+            if ($payload === null) {
+                flash('error', 'Broad-subnet confirmation expired, was already used, or is invalid. Nothing was added.');
+                header('Location: ' . $base . '/ip-bans.php' . list_state_qs());
+                exit;
+            }
+            $raw = (string)($payload['ip'] ?? '');
+            $reason = trim((string)($payload['reason'] ?? ''));
+            $dur_in = (string)($payload['duration'] ?? '');
+            $confirmed_warnings = is_array($payload['warnings'] ?? null) ? $payload['warnings'] : [];
+        } else {
+            $raw = (string)($_POST['ip'] ?? '');
+            $reason = trim((string)($_POST['reason'] ?? ''));
+            $dur_in = (string)($_POST['duration'] ?? '');
+            $confirmed_warnings = [];
+        }
 
-        // Allow multiple entries pasted one per line
-        $lines   = preg_split('/[\r\n,]+/', $raw) ?: [];
-        $added = 0; $skipped = 0; $bad = [];
+        $guardrails = cidr_guardrails();
+        $lines = preg_split('/[\r\n,]+/', $raw) ?: [];
+        $preflight = ip_ban_preflight($lines, $guardrails);
+        if ($preflight['invalid'] || $preflight['rejected']) {
+            $parts = [];
+            if ($preflight['invalid']) {
+                $parts[] = count($preflight['invalid']) . ' invalid';
+            }
+            if ($preflight['rejected']) {
+                $parts[] = count($preflight['rejected']) . ' at or broader than the hard cutoff: '
+                    . implode(' ', array_slice($preflight['rejected'], 0, 5));
+            }
+            flash('error', 'Nothing added; ' . implode(', ', $parts) . '.');
+            header('Location: ' . $base . '/ip-bans.php' . list_state_qs());
+            exit;
+        }
+        if (!$preflight['entries']) {
+            flash('error', 'Nothing added; enter at least one valid IP address or CIDR.');
+            header('Location: ' . $base . '/ip-bans.php' . list_state_qs());
+            exit;
+        }
+        if ($confirmed && !broad_add_confirmation_is_current($payload, $preflight, $guardrails)) {
+            flash('error', 'Subnet guard rails changed; review and confirm the request again. Nothing was added.');
+            header('Location: ' . $base . '/ip-bans.php' . list_state_qs());
+            exit;
+        }
+
+        if ($preflight['warnings'] && !$confirmed) {
+            $token = broad_add_confirmation_issue([
+                'ip' => $raw,
+                'reason' => $reason,
+                'duration' => $dur_in,
+                'warnings' => $preflight['warnings'],
+                'guardrails' => $guardrails,
+            ]);
+            $page_title = 'confirm broad subnets';
+            include __DIR__ . '/private/header.php';
+            ?>
+            <section class="card confirm-card">
+              <h1>confirm broad subnet ban</h1>
+              <p class="confirm-prompt">The following CIDRs are at or broader than the warning cutoff:</p>
+              <pre class="confirm-targets"><?= e(implode("\n", $preflight['warnings'])) ?></pre>
+              <p class="confirm-prompt">This can block large address ranges. Confirm this exact one-time request?</p>
+              <div class="confirm-actions">
+                <form method="post" class="inline">
+                  <?= csrf_field() ?>
+                  <input type="hidden" name="action" value="confirm_broad_add">
+                  <input type="hidden" name="confirmation_token" value="<?= e($token) ?>">
+                  <button type="submit" class="danger">add broad subnet(s)</button>
+                </form>
+                <a class="btn-cancel" href="<?= e($base) ?>/ip-bans.php<?= e(list_state_qs()) ?>">cancel</a>
+              </div>
+            </section>
+            <?php
+            include __DIR__ . '/private/footer.php';
+            exit;
+        }
 
         $default_to = (int)setting('default_timeout_seconds', '0');
         if ($dur_in === '') {
-            if ($default_to === 0) {
-                $duration = ['seconds' => null, 'expires_at' => null, 'permanent' => true];
-            } else {
-                $duration = [
-                    'seconds'    => $default_to,
-                    'expires_at' => gmdate('Y-m-d H:i:s', time() + $default_to),
-                    'permanent'  => false,
-                ];
-            }
+            $duration = $default_to === 0
+                ? ['expires_at' => null, 'permanent' => true]
+                : ['expires_at' => gmdate('Y-m-d H:i:s', time() + $default_to), 'permanent' => false];
         } else {
             $duration = parse_duration($dur_in);
             if ($duration === null) {
@@ -44,32 +107,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
 
-        $stmt = db()->prepare(
+        $exp = $duration['permanent'] ? null : $duration['expires_at'];
+        $pdo = db();
+        $stmt = $pdo->prepare(
             'INSERT INTO ip_bans (ip_address, reason, created_by, expires_at)
              VALUES (?, ?, ?, ?)
              ON DUPLICATE KEY UPDATE reason = VALUES(reason),
                                      created_by = VALUES(created_by),
                                      expires_at = VALUES(expires_at)'
         );
-
-        foreach ($lines as $line) {
-            $line = trim($line);
-            if ($line === '' || $line[0] === '#') continue;
-            $norm = normalize_ip_or_cidr($line);
-            if ($norm === null) {
-                $bad[] = $line;
-                continue;
+        $pdo->beginTransaction();
+        try {
+            foreach ($preflight['entries'] as $entry) {
+                $norm = $entry['normalized'];
+                $stmt->execute([$norm, $reason !== '' ? $reason : null, (int)$u['id'], $exp]);
+                audit_log_write((int)$u['id'], $u['username'], 'ip_ban_add', $norm,
+                                $exp ? "expires={$exp}" : 'permanent');
+                if ($confirmed && in_array($norm, $confirmed_warnings, true)) {
+                    audit_log_write((int)$u['id'], $u['username'], 'broad_ip_ban_confirm', $norm,
+                                    "{$entry['family']} prefix=/{$entry['prefix']}");
+                }
             }
-            $exp = $duration['permanent'] ? null : $duration['expires_at'];
-            $stmt->execute([$norm, $reason !== '' ? $reason : null, (int)$u['id'], $exp]);
-            $added++;
-            audit_log_write((int)$u['id'], $u['username'], 'ip_ban_add', $norm,
-                            $exp ? "expires={$exp}" : 'permanent');
+            $pdo->commit();
+        } catch (Throwable $e) {
+            if ($pdo->inTransaction()) $pdo->rollBack();
+            throw $e;
         }
-
-        $msg = "added {$added}";
-        if ($bad)     $msg .= ', ' . count($bad) . ' invalid: ' . e(implode(' ', array_slice($bad, 0, 5)));
-        flash($bad ? 'warn' : 'ok', $msg);
+        flash('ok', 'added ' . count($preflight['entries']));
 
     } elseif ($action === 'delete') {
         $id = (int)($_POST['id'] ?? 0);

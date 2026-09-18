@@ -27,6 +27,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     setting_set('lockout_minutes', (string)$lock);
     setting_set('session_timeout_minutes', (string)$idle);
 
+    $guardrail_defaults = [
+        'ipv4_warning_prefix' => '24',
+        'ipv4_hard_prefix' => '0',
+        'ipv6_warning_prefix' => '64',
+        'ipv6_hard_prefix' => '0',
+    ];
+    $old_guardrail_values = [];
+    foreach ($guardrail_defaults as $key => $default) {
+        $old_guardrail_values[$key] = setting($key, $default);
+    }
+    $old_guardrails = cidr_guardrails($old_guardrail_values);
+    $guardrails = cidr_guardrails($_POST);
+    $details = [];
+    foreach ($guardrails as $key => $value) {
+        setting_set($key, (string)$value);
+        if ((string)$old_guardrail_values[$key] !== (string)$value) {
+            $details[] = $value !== $old_guardrails[$key]
+                ? "{$key}=/{$old_guardrails[$key]}->/{$value}"
+                : "{$key}=normalized_to_/{$value}";
+        }
+    }
+    if ($details) {
+        audit_log_write((int)$u['id'], $u['username'], 'cidr_guardrails_update', null, implode(' ', $details));
+    }
+
     $req_tok = !empty($_POST['require_token_for_lists']) ? '1' : '0';
     setting_set('require_token_for_lists', $req_tok);
 
@@ -56,6 +81,7 @@ $cur_idle  = (int)setting('session_timeout_minutes', '30');
 $cur_req   = (int)setting('require_token_for_lists', '0');
 $cur_api   = (int)setting('enable_write_api', '0');
 $cur_tz    = (string)setting('default_timezone', '');
+$cur_guardrails = cidr_guardrails();
 
 function display_duration(int $s): string {
     if ($s === 0)   return 'permanent';
@@ -97,6 +123,43 @@ include __DIR__ . '/private/header.php';
           <?php endforeach; ?>
         </select>
         <small>applies when a user has not set their own timezone in their profile</small>
+      </div>
+    </fieldset>
+
+    <fieldset class="settings-group">
+      <legend>IP subnet guard rails</legend>
+      <p class="settings-note">
+        Prefixes at or broader than the hard-rejection cutoff are never written.
+        Prefixes at or broader than the warning cutoff require deliberate confirmation.
+        Lower prefix lengths cover broader networks; <code>/0</code> is always rejected.
+      </p>
+      <div class="field-row">
+        <div class="field">
+          <label for="ipv4_warning_prefix">IPv4 warning cutoff (prefix length)</label>
+          <input type="number" id="ipv4_warning_prefix" name="ipv4_warning_prefix"
+                 min="0" max="32" required value="<?= $cur_guardrails['ipv4_warning_prefix'] ?>">
+          <small>default /24: /24 or broader requires confirmation</small>
+        </div>
+        <div class="field">
+          <label for="ipv4_hard_prefix">IPv4 hard-rejection cutoff (prefix length)</label>
+          <input type="number" id="ipv4_hard_prefix" name="ipv4_hard_prefix"
+                 min="0" max="32" required value="<?= $cur_guardrails['ipv4_hard_prefix'] ?>">
+          <small>default /0: /0 is always rejected</small>
+        </div>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label for="ipv6_warning_prefix">IPv6 warning cutoff (prefix length)</label>
+          <input type="number" id="ipv6_warning_prefix" name="ipv6_warning_prefix"
+                 min="0" max="128" required value="<?= $cur_guardrails['ipv6_warning_prefix'] ?>">
+          <small>default /64: /64 or broader requires confirmation</small>
+        </div>
+        <div class="field">
+          <label for="ipv6_hard_prefix">IPv6 hard-rejection cutoff (prefix length)</label>
+          <input type="number" id="ipv6_hard_prefix" name="ipv6_hard_prefix"
+                 min="0" max="128" required value="<?= $cur_guardrails['ipv6_hard_prefix'] ?>">
+          <small>default /0: /0 is always rejected</small>
+        </div>
       </div>
     </fieldset>
 

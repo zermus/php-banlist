@@ -66,11 +66,12 @@ if ($type === 'ip') {
          ORDER BY ip_address'
     );
     echo "# php-banlist v" . PBL_VERSION . " ip list, generated " . gmdate('c') . "\n";
+    $guardrails = cidr_guardrails();
     while (($row = $stmt->fetch(PDO::FETCH_ASSOC))) {
-        // Defense in depth: re-validate before emitting
-        $v = normalize_ip_or_cidr($row['ip_address']);
-        if ($v !== null) {
-            echo $v . "\n";
+        // Defense in depth: never emit entries at or broader than the hard cutoff.
+        $check = ip_ban_policy($row['ip_address'], $guardrails);
+        if ($check['status'] === 'allow' || $check['status'] === 'warn') {
+            echo $check['normalized'] . "\n";
         }
     }
 } else {

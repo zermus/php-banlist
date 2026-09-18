@@ -386,6 +386,15 @@ form.settings-form {
   line-height: 1.6;
   margin: 4px 0 18px;
 }
+.confirm-targets {
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  color: var(--warn);
+  border: 1px solid rgba(255,177,59,0.3);
+  background: var(--bg);
+  padding: 10px;
+  margin: 0 0 18px;
+}
 .confirm-actions {
   display: flex;
   align-items: center;
