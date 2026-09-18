@@ -153,8 +153,10 @@ new migrations.
 0.6 ships NO schema changes, so upgrading from 0.5 is just the file
 swap below — re-running install.php is harmless but not required. New CIDR
 guard-rail settings use safe defaults without a migration: warning at IPv4
-/24-or-broader and IPv6 /64-or-broader, with /0 hard-rejected. A superadmin
-can adjust the prefix-length cutoffs on the settings page after upgrading.
+/24-or-broader and IPv6 /64-or-broader. IPv4/IPv6 /0 and unspecified targets
+are rejected and suppressed from feeds unless a superadmin explicitly enables
+them; even then, every addition requires the one-use web confirmation or exact
+API override. Superadmins can adjust these controls on the settings page.
 (Upgrading from 0.3 or earlier still needs install.php for migration
 0003; make sure the DB user has DDL privileges at that moment — see
 section 2 if you revoked them after the last install.)

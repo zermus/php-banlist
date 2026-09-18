@@ -18,6 +18,7 @@ $defaults = cidr_guardrails([
     'ipv4_hard_prefix' => '0',
     'ipv6_warning_prefix' => '64',
     'ipv6_hard_prefix' => '0',
+    'allow_whole_family_targets' => '0',
 ]);
 
 $cases = [
@@ -26,11 +27,15 @@ $cases = [
     '10.0.0.0/24'  => 'warn',
     '10.0.0.0/1'   => 'warn',
     '10.0.0.0/0'   => 'reject',
+    '0.0.0.0'       => 'reject',
+    '0.0.0.0/32'    => 'reject',
     '2001:db8::1'   => 'allow',
     '2001:db8::/65' => 'allow',
     '2001:db8::/64' => 'warn',
     '2001:db8::/1'  => 'warn',
     '2001:db8::/0'  => 'reject',
+    '::'             => 'reject',
+    '::/128'         => 'reject',
 ];
 foreach ($cases as $input => $status) {
     expect_same("policy {$input}", $status, ip_ban_policy($input, $defaults)['status']);
@@ -38,6 +43,28 @@ foreach ($cases as $input => $status) {
 expect_same('non-canonical IPv4 /0 rejected', 'reject', ip_ban_policy('203.0.113.7/0', $defaults)['status']);
 expect_same('non-canonical IPv6 /0 rejected', 'reject', ip_ban_policy('2001:db8::1/0', $defaults)['status']);
 expect_same('legacy /0 remains normalizable for removal', '203.0.113.7/0', normalize_ip_or_cidr('203.0.113.7/0'));
+
+$whole_family_enabled = cidr_guardrails([
+    'ipv4_warning_prefix' => '24',
+    'ipv4_hard_prefix' => '0',
+    'ipv6_warning_prefix' => '64',
+    'ipv6_hard_prefix' => '0',
+    'allow_whole_family_targets' => '1',
+]);
+foreach (['0.0.0.0', '0.0.0.0/32', '203.0.113.7/0', '::', '::/128', '2001:db8::1/0'] as $input) {
+    expect_same("enabled dangerous target {$input} requires confirmation", 'warn',
+        ip_ban_policy($input, $whole_family_enabled)['status']);
+    expect_same("enabled dangerous target {$input} is feed-safe", true,
+        ip_ban_feed_target($input, $whole_family_enabled) !== null);
+    expect_same("disabled dangerous target {$input} suppressed from feed", null,
+        ip_ban_feed_target($input, $defaults));
+}
+foreach ([null, '', 'true', 'yes', '01', 1, true] as $value) {
+    $rails = cidr_guardrails(['allow_whole_family_targets' => $value]);
+    expect_same('malformed whole-family setting is disabled: ' . var_export($value, true), false,
+        $rails['allow_whole_family_targets']);
+}
+expect_same('exact whole-family setting enabled', true, $whole_family_enabled['allow_whole_family_targets']);
 
 $malformed = cidr_guardrails([
     'ipv4_warning_prefix' => 'garbage',
@@ -58,11 +85,16 @@ $conflict = cidr_guardrails([
 expect_same('IPv4 warning cannot conflict with hard cutoff', 16, $conflict['ipv4_warning_prefix']);
 expect_same('IPv6 warning cannot conflict with hard cutoff', 64, $conflict['ipv6_warning_prefix']);
 
-$bulk = ip_ban_preflight(['203.0.113.5', '10.0.0.0/24', '0.0.0.0/0', 'bad'], $defaults);
+$bulk = ip_ban_preflight(['203.0.113.5', '10.0.0.0/24', '0.0.0.0/0', '::', 'bad'], $defaults);
 expect_same('mixed bulk has two writable entries', 2, count($bulk['entries']));
 expect_same('mixed bulk detects warning before writes', ['10.0.0.0/24'], $bulk['warnings']);
-expect_same('mixed bulk detects hard reject before writes', ['0.0.0.0/0'], $bulk['rejected']);
+expect_same('mixed bulk detects all policy rejects before writes', ['0.0.0.0/0', '::'], $bulk['rejected']);
 expect_same('mixed bulk detects invalid before writes', ['bad'], $bulk['invalid']);
+$enabled_bulk = ip_ban_preflight(['203.0.113.5', '0.0.0.0', '::/0'], $whole_family_enabled);
+expect_same('enabled mixed bulk retains every entry', 3, count($enabled_bulk['entries']));
+expect_same('enabled mixed bulk requires confirmation for dangerous entries', ['0.0.0.0', '::/0'],
+    $enabled_bulk['warnings']);
+expect_same('enabled mixed bulk has no rejects', [], $enabled_bulk['rejected']);
 
 expect_same('exact API override accepted', true, broad_subnet_override_requested(['confirm_broad_subnets' => 'yes']));
 foreach (['1', 'true', 'YES', 'yes '] as $override) {
@@ -85,6 +117,10 @@ expect_same('exact confirmation remains current', true,
 $changed_guardrails = $defaults;
 $changed_guardrails['ipv4_warning_prefix'] = 20;
 expect_same('changed guardrails make confirmation stale', false,
+    broad_add_confirmation_is_current($payload, $confirmation_preflight, $changed_guardrails));
+$changed_guardrails = $defaults;
+$changed_guardrails['allow_whole_family_targets'] = true;
+expect_same('changed whole-family policy makes confirmation stale', false,
     broad_add_confirmation_is_current($payload, $confirmation_preflight, $changed_guardrails));
 $changed_preflight = ip_ban_preflight(['10.0.0.0/25'], $defaults);
 expect_same('altered warnings make confirmation stale', false,

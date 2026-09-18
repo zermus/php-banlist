@@ -37,16 +37,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     foreach ($guardrail_defaults as $key => $default) {
         $old_guardrail_values[$key] = setting($key, $default);
     }
+    $old_whole_family = setting('allow_whole_family_targets', '0');
+    $old_guardrail_values['allow_whole_family_targets'] = $old_whole_family;
     $old_guardrails = cidr_guardrails($old_guardrail_values);
     $guardrails = cidr_guardrails($_POST);
     $details = [];
-    foreach ($guardrails as $key => $value) {
+    foreach ($guardrail_defaults as $key => $default) {
+        $value = $guardrails[$key];
         setting_set($key, (string)$value);
         if ((string)$old_guardrail_values[$key] !== (string)$value) {
             $details[] = $value !== $old_guardrails[$key]
                 ? "{$key}=/{$old_guardrails[$key]}->/{$value}"
                 : "{$key}=normalized_to_/{$value}";
         }
+    }
+    $allow_whole_family = $guardrails['allow_whole_family_targets'] ? '1' : '0';
+    setting_set('allow_whole_family_targets', $allow_whole_family);
+    if ($allow_whole_family !== $old_whole_family) {
+        $details[] = "allow_whole_family_targets={$allow_whole_family}";
     }
     if ($details) {
         audit_log_write((int)$u['id'], $u['username'], 'cidr_guardrails_update', null, implode(' ', $details));
@@ -131,7 +139,8 @@ include __DIR__ . '/private/header.php';
       <p class="settings-note">
         Prefixes at or broader than the hard-rejection cutoff are never written.
         Prefixes at or broader than the warning cutoff require deliberate confirmation.
-        Lower prefix lengths cover broader networks; <code>/0</code> is always rejected.
+        Lower prefix lengths cover broader networks. Whole-family and unspecified
+        targets have a separate, disabled-by-default safeguard below.
       </p>
       <div class="field-row">
         <div class="field">
@@ -144,7 +153,7 @@ include __DIR__ . '/private/header.php';
           <label for="ipv4_hard_prefix">IPv4 hard-rejection cutoff (prefix length)</label>
           <input type="number" id="ipv4_hard_prefix" name="ipv4_hard_prefix"
                  min="0" max="32" required value="<?= $cur_guardrails['ipv4_hard_prefix'] ?>">
-          <small>default /0: /0 is always rejected</small>
+          <small>default /0: /0 is rejected unless explicitly enabled below</small>
         </div>
       </div>
       <div class="field-row">
@@ -158,8 +167,18 @@ include __DIR__ . '/private/header.php';
           <label for="ipv6_hard_prefix">IPv6 hard-rejection cutoff (prefix length)</label>
           <input type="number" id="ipv6_hard_prefix" name="ipv6_hard_prefix"
                  min="0" max="128" required value="<?= $cur_guardrails['ipv6_hard_prefix'] ?>">
-          <small>default /0: /0 is always rejected</small>
+          <small>default /0: /0 is rejected unless explicitly enabled below</small>
         </div>
+      </div>
+      <div class="field">
+        <label class="checkbox">
+          <input type="checkbox" name="allow_whole_family_targets" value="1"
+                 <?= $cur_guardrails['allow_whole_family_targets'] ? 'checked' : '' ?>>
+          allow whole-family and unspecified IP targets
+        </label>
+        <small>dangerous and disabled by default: IPv4/IPv6 <code>/0</code>,
+               <code>0.0.0.0</code>, <code>0.0.0.0/32</code>, <code>::</code>, and
+               <code>::/128</code> remain confirmation-required when enabled</small>
       </div>
     </fieldset>
 

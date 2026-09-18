@@ -96,11 +96,15 @@ token= field. Form-encoded or JSON bodies.
               (blank = system default from settings)
     confirm_broad_subnets
               optional; must be exactly yes when an IP add is at or broader
-              than the configured warning cutoff
+              than the configured warning cutoff or is an enabled dangerous
+              whole-family/unspecified target
 
   IP additions are preflighted as a whole request. Any invalid or
-  hard-rejected entry rejects the request without writes. The broad-subnet
-  override never bypasses a hard cutoff, including the mandatory /0 floor.
+  hard-rejected entry rejects the request without writes. IPv4/IPv6 /0 and
+  unspecified targets (0.0.0.0, 0.0.0.0/32, ::, and ::/128) are rejected and
+  suppressed from feeds by default. A superadmin can explicitly enable them;
+  they still always require confirm_broad_subnets=yes for API additions or the
+  one-use confirmation screen in the web UI.
 
   Examples:
     curl -X POST -H 'X-API-Token: TOKEN' \
